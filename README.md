@@ -18,3 +18,19 @@ View your app in AI Studio: https://ai.studio/apps/dfd4e0bb-0d92-4524-9835-041eb
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Deploy on Render with Supabase
+
+Use these Render settings for a Web Service:
+
+- Build Command: `npm ci && npm run build`
+- Start Command: `npm start`
+- Health Check Path: `/api/health`
+
+Set these environment variables in Render:
+
+- `DATABASE_URL`: Supabase PostgreSQL connection string (use the pooler connection string if Render cannot reach the direct database)
+- `GEMINI_API_KEY`: Gemini API key used by contract generation
+- `NODE_ENV`: `production`
+
+The server listens on Render's `PORT` automatically and serves the Vite build from `dist` in production.
