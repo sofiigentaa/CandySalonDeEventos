@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@media print {
+  @page {
+    margin: 12mm 10mm;
+    size: auto;
+  }
+
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 12pt !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide navigation, mobile bottom dock, and toolbars */
+  header,
+  nav,
+  #mobile-bottom-dock,
+  footer,
+  .print\:hidden,
+  .no-print {
+    display: none !important;
+  }
+
+  /* When printing voucher, isolate voucher and hide background app content */
+  body.printing-voucher main,
+  body.printing-voucher > #root > div > main {
+    display: none !important;
+  }
+
+  /* When printing within a modal overlay, reset fixed positioning and backdrops */
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  /* Ensure modal card takes full printable width and removes borders/shadows */
+  .max-w-xl,
+  .max-w-2xl,
+  .max-w-3xl,
+  .max-w-4xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .shadow-2xl,
+  .shadow-xl,
+  .shadow-lg,
+  .shadow-md,
+  .shadow-sm,
+  .shadow-xs {
+    box-shadow: none !important;
+  }
+
+  .overflow-hidden,
+  .overflow-y-auto {
+    overflow: visible !important;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+}
