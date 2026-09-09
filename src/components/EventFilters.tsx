@@ -12,6 +12,7 @@ interface EventFiltersProps {
   totalCount: number;
   filteredCount: number;
   onOpenNewEvent?: () => void;
+  isCalendarView?: boolean;
 }
 
 export const EventFilters: React.FC<EventFiltersProps> = ({
@@ -24,6 +25,7 @@ export const EventFilters: React.FC<EventFiltersProps> = ({
   totalCount,
   filteredCount,
   onOpenNewEvent,
+  isCalendarView,
 }) => {
   return (
     <div className="bg-white rounded-2xl border border-slate-200/80 p-3 mb-4 shadow-xs space-y-2.5">
@@ -65,7 +67,7 @@ export const EventFilters: React.FC<EventFiltersProps> = ({
               <option value="date_desc">Fecha más lejana</option>
               <option value="balance_desc">Mayor saldo pendiente</option>
               <option value="total_desc">Mayor monto total</option>
-              <option value="client_asc">Cliente (A-Z)</option>
+              {!isCalendarView && <option value="client_asc">Cliente (A-Z)</option>}
             </select>
           </div>
 
