@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { EventItem, ExpenseItem, ReminderItem } from '../types.ts';
 import {
-  exportFullJsonBackup,
   exportPlainTextContingencyReport,
   exportEventsCSV,
   BackupPayload,
@@ -57,12 +56,6 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     return acc + Math.max(fromDeposit, fromHistory);
   }, 0);
   const totalPending = events.reduce((acc, evt) => acc + getRemainingBalance(evt), 0);
-
-  const handleExportJson = () => {
-    exportFullJsonBackup(events, expenses, reminders);
-    setDownloadSuccess('¡Respaldo plano completo descargado exitosamente (.JSON)!');
-    setTimeout(() => setDownloadSuccess(null), 5000);
-  };
 
   const handleExportTxt = () => {
     exportPlainTextContingencyReport(events, expenses, reminders);
@@ -235,29 +228,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               <span>1. Descargar Respaldo en Archivo Plano</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Opción 1: JSON Completo */}
-              <button
-                id="btn-backup-export-json"
-                type="button"
-                onClick={handleExportJson}
-                className="group flex flex-col items-start p-4 rounded-2xl border-2 border-indigo-200/70 hover:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-50/90 transition-all text-left cursor-pointer shadow-xs hover:shadow-md"
-              >
-                <div className="p-2 bg-indigo-600 text-white rounded-xl mb-3 shadow-xs group-hover:scale-105 transition-transform">
-                  <Database className="w-5 h-5" />
-                </div>
-                <div className="font-bold text-sm text-indigo-950 mb-1">
-                  Respaldo Completo (.JSON)
-                </div>
-                <p className="text-[11px] text-indigo-700/80 leading-relaxed">
-                  Copia íntegra con eventos, pagos, señas, gastos y recordatorios. Permite restauración total.
-                </p>
-                <span className="mt-3 text-[11px] font-bold text-indigo-600 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-1">
-                  Descargar JSON →
-                </span>
-              </button>
-
-              {/* Opción 2: TXT Reporte Legible */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Opción 1: TXT Reporte Legible */}
               <button
                 id="btn-backup-export-txt"
                 type="button"
@@ -347,7 +319,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 text-amber-900 text-xs flex items-start gap-2.5">
             <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="leading-relaxed text-[11px]">
-              <strong>Consejo de seguridad:</strong> Se recomienda hacer clic en <em>"Respaldo Completo (.JSON)"</em> una vez por semana o antes de los fines de semana. Guarda el archivo en tu computadora o pendrive para tener siempre toda la información protegida ante cortes de luz, internet o caídas de servidores.
+              <strong>Consejo de seguridad:</strong> Se recomienda descargar el <em>"Reporte Plano (.TXT)"</em> o la <em>"Planilla (.CSV / Excel)"</em> una vez por semana o antes de los fines de semana. Guarda el archivo en tu computadora o pendrive para tener siempre toda la información protegida ante cortes de luz, internet o caídas de servidores.
             </p>
           </div>
         </div>
