@@ -190,51 +190,79 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
               1. Selecciona el Día del Evento:
             </label>
             <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
+              <div
                 onClick={() => setDayType('weekday')}
-                className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer ${
+                className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer select-none ${
                   dayType === 'weekday'
                     ? 'bg-pink-50 border-pink-400 text-pink-900 ring-2 ring-pink-500/30 font-bold'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <div className="text-[11px]">Lunes a Jueves</div>
-                <div className="text-xs font-black text-pink-700 mt-0.5">
-                  {formatCurrency(basePrices.weekday, currency)}
+                <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                  <span className="text-[10px] font-bold text-pink-700">$ARS</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={basePrices.weekday}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                      setBasePrices((prev) => ({ ...prev, weekday: Math.max(0, Number(e.target.value) || 0) }))
+                    }
+                    className="w-16 text-xs font-black text-pink-700 bg-transparent border-b border-pink-300/60 text-center outline-hidden focus:border-pink-500"
+                  />
                 </div>
-              </button>
+              </div>
 
-              <button
-                type="button"
+              <div
                 onClick={() => setDayType('friday')}
-                className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer ${
+                className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer select-none ${
                   dayType === 'friday'
                     ? 'bg-pink-50 border-pink-400 text-pink-900 ring-2 ring-pink-500/30 font-bold'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <div className="text-[11px]">Viernes</div>
-                <div className="text-xs font-black text-pink-700 mt-0.5">
-                  {formatCurrency(basePrices.friday, currency)}
+                <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                  <span className="text-[10px] font-bold text-pink-700">$ARS</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={basePrices.friday}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                      setBasePrices((prev) => ({ ...prev, friday: Math.max(0, Number(e.target.value) || 0) }))
+                    }
+                    className="w-16 text-xs font-black text-pink-700 bg-transparent border-b border-pink-300/60 text-center outline-hidden focus:border-pink-500"
+                  />
                 </div>
-              </button>
+              </div>
 
-              <button
-                type="button"
+              <div
                 onClick={() => setDayType('weekend')}
-                className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer ${
+                className={`p-2.5 rounded-xl border font-semibold text-center transition-all cursor-pointer select-none ${
                   dayType === 'weekend'
                     ? 'bg-pink-50 border-pink-400 text-pink-900 ring-2 ring-pink-500/30 font-bold'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <div className="text-[11px]">Sáb / Dom / Feriado</div>
-                <div className="text-xs font-black text-pink-700 mt-0.5">
-                  {formatCurrency(basePrices.weekend, currency)}
+                <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                  <span className="text-[10px] font-bold text-pink-700">$ARS</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={basePrices.weekend}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) =>
+                      setBasePrices((prev) => ({ ...prev, weekend: Math.max(0, Number(e.target.value) || 0) }))
+                    }
+                    className="w-16 text-xs font-black text-pink-700 bg-transparent border-b border-pink-300/60 text-center outline-hidden focus:border-pink-500"
+                  />
                 </div>
-              </button>
+              </div>
             </div>
+            <p className="text-[10px] text-slate-400">Tocá el precio de cada día para editarlo.</p>
           </div>
 
           {/* Quick Details: Event Type & Guests */}
@@ -261,15 +289,19 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
               <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
                 Duración del Turno
               </label>
-              <select
+              <input
+                type="text"
+                list="duration-suggestions"
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
+                placeholder="Ej: 3 Horas"
                 className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-800 text-xs"
-              >
-                <option value="2.5 Horas">2.5 Horas</option>
-                <option value="3 Horas">3 Horas (Estándar)</option>
-                <option value="4 Horas">4 Horas (Extendido)</option>
-              </select>
+              />
+              <datalist id="duration-suggestions">
+                <option value="2.5 Horas" />
+                <option value="3 Horas (Estándar)" />
+                <option value="4 Horas (Extendido)" />
+              </datalist>
             </div>
 
             <div>
@@ -330,9 +362,16 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-black text-xs text-slate-800">
-                      {formatCurrency(item.price, currency)}
-                    </span>
+                    <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[10px] font-bold text-slate-500">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.price}
+                        onChange={(e) => updateAdditionalPrice(item.id, Number(e.target.value) || 0)}
+                        className="w-16 font-black text-xs text-slate-800 bg-transparent border-b border-slate-300 text-right outline-hidden focus:border-pink-500"
+                      />
+                    </div>
                     <input
                       type="checkbox"
                       checked={item.selected}
