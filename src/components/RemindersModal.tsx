@@ -24,6 +24,8 @@ import {
   ChevronRight,
   Filter,
   Zap,
+  Edit3,
+  Flag,
 } from 'lucide-react';
 
 interface RemindersModalProps {
@@ -33,10 +35,19 @@ interface RemindersModalProps {
   events: EventItem[];
   currency: string;
   onAddReminder: (reminder: Omit<ReminderItem, 'id' | 'createdAt'>) => void;
+  onUpdateReminder?: (reminder: ReminderItem) => void;
   onToggleComplete: (reminderId: string) => void;
   onDeleteReminder: (reminderId: string) => void;
   initialEventId?: string | null;
   preselectedEventId?: string | null;
+}
+
+interface QuickShortcut {
+  id: string;
+  label: string;
+  title: string;
+  cat: ReminderCategory;
+  prio: ReminderPriority;
 }
 
 const CATEGORY_CONFIG: Record<
@@ -94,6 +105,7 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
   events,
   currency,
   onAddReminder,
+  onUpdateReminder,
   onToggleComplete,
   onDeleteReminder,
   initialEventId,
@@ -116,6 +128,62 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
   const [notes, setNotes] = useState('');
 
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | ReminderPriority>('all');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Editable "atajos rápidos" (quick shortcuts): seeded with defaults, persisted locally,
+  // and can be deleted or extended with custom ones per the user's own workflow.
+  const DEFAULT_SHORTCUTS: QuickShortcut[] = [
+    { id: 'sc-cobrar', label: '💰 Cobrar saldo restante', title: 'Cobrar saldo pendiente', cat: 'cobro_saldo', prio: 'high' },
+    { id: 'sc-invitados', label: '👥 Confirmar invitados', title: 'Confirmar lista final de invitados (adultos y niños)', cat: 'confirmar_invitados', prio: 'medium' },
+    { id: 'sc-catering', label: '🎂 Torta & Catering', title: 'Encargar torta temática, snacks y catering', cat: 'proveedores_catering', prio: 'high' },
+    { id: 'sc-inflable', label: '🏰 Inflable & Pelotero', title: 'Coordinar armado y chequeo de inflable y pelotero', cat: 'proveedores_catering', prio: 'high' },
+    { id: 'sc-candy', label: '🍭 Decoración & Candy Bar', title: 'Armado de temática, globología y golosinas', cat: 'decoracion_candy', prio: 'medium' },
+    { id: 'sc-horarios', label: '🕒 Avisar horarios (48h)', title: 'Avisar horarios de ingreso y entrega de torta al cliente', cat: 'aviso_cliente', prio: 'high' },
+    { id: 'sc-llaves', label: '🔑 Entrega de llaves', title: 'Recepción, apertura del salón y entrega de llaves', cat: 'otro', prio: 'medium' },
+    { id: 'sc-limpieza', label: '🧹 Limpieza y personal', title: 'Coordinación de personal de limpieza y cierre', cat: 'otro', prio: 'low' },
+  ];
+  const [shortcuts, setShortcuts] = useState<QuickShortcut[]>(() => {
+    try {
+      const saved = localStorage.getItem('candy_reminder_shortcuts');
+      return saved ? JSON.parse(saved) : DEFAULT_SHORTCUTS;
+    } catch {
+      return DEFAULT_SHORTCUTS;
+    }
+  });
+  const [isManagingShortcuts, setIsManagingShortcuts] = useState(false);
+  const [isAddingShortcut, setIsAddingShortcut] = useState(false);
+  const [newShortcutLabel, setNewShortcutLabel] = useState('');
+  const [newShortcutTitle, setNewShortcutTitle] = useState('');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('candy_reminder_shortcuts', JSON.stringify(shortcuts));
+    } catch {
+      // Ignore storage errors (e.g. private browsing)
+    }
+  }, [shortcuts]);
+
+  const handleDeleteShortcut = (id: string) => {
+    setShortcuts((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleAddShortcut = () => {
+    if (!newShortcutLabel.trim() || !newShortcutTitle.trim()) return;
+    setShortcuts((prev) => [
+      ...prev,
+      {
+        id: `sc-custom-${Date.now()}`,
+        label: newShortcutLabel.trim(),
+        title: newShortcutTitle.trim(),
+        cat: 'otro',
+        prio: 'medium',
+      },
+    ]);
+    setNewShortcutLabel('');
+    setNewShortcutTitle('');
+    setIsAddingShortcut(false);
+  };
 
   const handleOpenCreateForm = () => {
     setIsAddingNew(true);
@@ -192,31 +260,63 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
       }
     }
 
-    onAddReminder({
-      eventId: selectedEventId || undefined,
-      eventTitle,
-      clientName,
-      clientPhone,
-      title: title.trim(),
-      dueDate,
-      dueTime: dueTime || undefined,
-      category,
-      completed: false,
-      priority,
-      notes: notes.trim() || undefined,
-    });
+    if (editingId) {
+      const original = reminders.find((r) => r.id === editingId);
+      if (original && onUpdateReminder) {
+        onUpdateReminder({
+          ...original,
+          eventId: selectedEventId || undefined,
+          eventTitle,
+          clientName,
+          clientPhone,
+          title: title.trim(),
+          dueDate,
+          dueTime: dueTime || undefined,
+          category,
+          priority,
+          notes: notes.trim() || undefined,
+        });
+      }
+    } else {
+      onAddReminder({
+        eventId: selectedEventId || undefined,
+        eventTitle,
+        clientName,
+        clientPhone,
+        title: title.trim(),
+        dueDate,
+        dueTime: dueTime || undefined,
+        category,
+        completed: false,
+        priority,
+        notes: notes.trim() || undefined,
+      });
 
-    // Play pleasant chime and trigger browser desktop alert
-    playNotificationSound();
-    triggerBrowserNotification('¡Recordatorio Guardado en Candy Salón!', {
-      body: `${title.trim()} (Fecha: ${dueDate}${dueTime ? ` a las ${dueTime}` : ''})`,
-    });
+      // Play pleasant chime and trigger browser desktop alert only for new reminders
+      playNotificationSound();
+      triggerBrowserNotification('¡Recordatorio Guardado en Candy Salón!', {
+        body: `${title.trim()} (Fecha: ${dueDate}${dueTime ? ` a las ${dueTime}` : ''})`,
+      });
+    }
 
     // Reset form
     setTitle('');
     setSelectedEventId('');
     setNotes('');
     setIsAddingNew(false);
+    setEditingId(null);
+  };
+
+  const handleStartEdit = (reminder: ReminderItem) => {
+    setEditingId(reminder.id);
+    setTitle(reminder.title);
+    setSelectedEventId(reminder.eventId || '');
+    setDueDate(reminder.dueDate);
+    setDueTime(reminder.dueTime || '');
+    setCategory(reminder.category);
+    setPriority(reminder.priority);
+    setNotes(reminder.notes || '');
+    handleOpenCreateForm();
   };
 
   // Filtered Reminders
@@ -225,6 +325,7 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
       if (activeTab === 'pending' && r.completed) return false;
       if (activeTab === 'completed' && !r.completed) return false;
       if (categoryFilter !== 'all' && r.category !== categoryFilter) return false;
+      if (priorityFilter !== 'all' && r.priority !== priorityFilter) return false;
       return true;
     })
     .sort((a, b) => {
@@ -303,7 +404,7 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-indigo-600" />
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                    Añadir Nuevo Recordatorio
+                    {editingId ? 'Editar Recordatorio' : 'Añadir Nuevo Recordatorio'}
                   </h3>
                 </div>
                 <span className="text-[11px] text-indigo-600 font-semibold">
@@ -330,77 +431,88 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
 
                 {/* Atajos Rápidos / One-click Presets */}
                 <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 space-y-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
-                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                    <span>Atajos rápidos para este recordatorio (1 click):</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                      <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                      <span>Atajos rápidos para este recordatorio (1 click):</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsManagingShortcuts((v) => !v)}
+                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 underline cursor-pointer shrink-0"
+                    >
+                      {isManagingShortcuts ? 'Listo' : 'Editar atajos'}
+                    </button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {[
-                      {
-                        label: '💰 Cobrar saldo restante',
-                        title: 'Cobrar saldo pendiente',
-                        cat: 'cobro_saldo' as ReminderCategory,
-                        prio: 'high' as ReminderPriority,
-                      },
-                      {
-                        label: '👥 Confirmar invitados',
-                        title: 'Confirmar lista final de invitados (adultos y niños)',
-                        cat: 'confirmar_invitados' as ReminderCategory,
-                        prio: 'medium' as ReminderPriority,
-                      },
-                      {
-                        label: '🎂 Torta & Catering',
-                        title: 'Encargar torta temática, snacks y catering',
-                        cat: 'proveedores_catering' as ReminderCategory,
-                        prio: 'high' as ReminderPriority,
-                      },
-                      {
-                        label: '🏰 Inflable & Pelotero',
-                        title: 'Coordinar armado y chequeo de inflable y pelotero',
-                        cat: 'proveedores_catering' as ReminderCategory,
-                        prio: 'high' as ReminderPriority,
-                      },
-                      {
-                        label: '🍭 Decoración & Candy Bar',
-                        title: 'Armado de temática, globología y golosinas',
-                        cat: 'decoracion_candy' as ReminderCategory,
-                        prio: 'medium' as ReminderPriority,
-                      },
-                      {
-                        label: '🕒 Avisar horarios (48h)',
-                        title: 'Avisar horarios de ingreso y entrega de torta al cliente',
-                        cat: 'aviso_cliente' as ReminderCategory,
-                        prio: 'high' as ReminderPriority,
-                      },
-                      {
-                        label: '🔑 Entrega de llaves',
-                        title: 'Recepción, apertura del salón y entrega de llaves',
-                        cat: 'otro' as ReminderCategory,
-                        prio: 'medium' as ReminderPriority,
-                      },
-                      {
-                        label: '🧹 Limpieza y personal',
-                        title: 'Coordinación de personal de limpieza y cierre',
-                        cat: 'otro' as ReminderCategory,
-                        prio: 'low' as ReminderPriority,
-                      },
-                    ].map((shortcut, sIdx) => (
-                      <button
-                        key={sIdx}
-                        type="button"
-                        onClick={() => {
-                          const ev = events.find((x) => x.id === selectedEventId);
-                          const clientSuffix = ev ? ` - ${ev.clientName}` : '';
-                          setTitle(`${shortcut.title}${clientSuffix}`);
-                          setCategory(shortcut.cat);
-                          setPriority(shortcut.prio);
-                        }}
-                        className="inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-pink-300 hover:text-pink-700 hover:bg-pink-50/50 shadow-2xs transition-all cursor-pointer active:scale-95"
-                      >
-                        {shortcut.label}
-                      </button>
+                    {shortcuts.map((shortcut) => (
+                      <div key={shortcut.id} className="relative inline-flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isManagingShortcuts) return;
+                            const ev = events.find((x) => x.id === selectedEventId);
+                            const clientSuffix = ev ? ` - ${ev.clientName}` : '';
+                            setTitle(`${shortcut.title}${clientSuffix}`);
+                            setCategory(shortcut.cat);
+                            setPriority(shortcut.prio);
+                          }}
+                          className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-pink-300 hover:text-pink-700 hover:bg-pink-50/50 shadow-2xs transition-all cursor-pointer active:scale-95 ${
+                            isManagingShortcuts ? 'pr-5' : ''
+                          }`}
+                        >
+                          {shortcut.label}
+                        </button>
+                        {isManagingShortcuts && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteShortcut(shortcut.id)}
+                            title="Eliminar este atajo"
+                            className="absolute right-0.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-rose-600 cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     ))}
+
+                    {isManagingShortcuts && !isAddingShortcut && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingShortcut(true)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Nuevo atajo</span>
+                      </button>
+                    )}
                   </div>
+
+                  {isManagingShortcuts && isAddingShortcut && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-200/80">
+                      <input
+                        type="text"
+                        placeholder="Etiqueta corta (ej: 📷 Fotógrafo)"
+                        value={newShortcutLabel}
+                        onChange={(e) => setNewShortcutLabel(e.target.value)}
+                        className="flex-1 min-w-[140px] text-[11px] px-2 py-1 bg-white border border-slate-200 rounded-lg"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Título completo del recordatorio"
+                        value={newShortcutTitle}
+                        onChange={(e) => setNewShortcutTitle(e.target.value)}
+                        className="flex-1 min-w-[160px] text-[11px] px-2 py-1 bg-white border border-slate-200 rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddShortcut}
+                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <input
@@ -599,7 +711,10 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddingNew(false)}
+                  onClick={() => {
+                    setIsAddingNew(false);
+                    setEditingId(null);
+                  }}
                   className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                 >
                   Cancelar
@@ -608,7 +723,7 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
                   type="submit"
                   className="px-4 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
                 >
-                  Guardar Recordatorio
+                  {editingId ? 'Guardar Cambios' : 'Guardar Recordatorio'}
                 </button>
               </div>
             </form>
@@ -810,6 +925,58 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
                 📝 General / Otro
               </button>
             </div>
+
+            {/* Priority Filter Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1 text-[11px]">
+              <span className="flex items-center gap-1 text-slate-400 font-semibold shrink-0">
+                <Flag className="w-3 h-3" />
+                Prioridad:
+              </span>
+              <button
+                type="button"
+                onClick={() => setPriorityFilter('all')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all shrink-0 cursor-pointer ${
+                  priorityFilter === 'all'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                type="button"
+                onClick={() => setPriorityFilter('high')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all shrink-0 cursor-pointer ${
+                  priorityFilter === 'high'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-red-50 text-red-800 border border-red-200 hover:bg-red-100'
+                }`}
+              >
+                🔴 Alta
+              </button>
+              <button
+                type="button"
+                onClick={() => setPriorityFilter('medium')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all shrink-0 cursor-pointer ${
+                  priorityFilter === 'medium'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                }`}
+              >
+                🟡 Media
+              </button>
+              <button
+                type="button"
+                onClick={() => setPriorityFilter('low')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all shrink-0 cursor-pointer ${
+                  priorityFilter === 'low'
+                    ? 'bg-slate-600 text-white'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
+                }`}
+              >
+                ⚪ Baja
+              </button>
+            </div>
           </div>
 
           {/* List of Reminders */}
@@ -972,6 +1139,14 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
                           <MessageCircle className="w-4 h-4" />
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => handleStartEdit(reminder)}
+                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors cursor-pointer"
+                        title="Editar recordatorio"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => onDeleteReminder(reminder.id)}
