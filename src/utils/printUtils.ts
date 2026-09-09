@@ -22,8 +22,7 @@ export function printDocument(elementId?: string, title: string = 'Documento - C
       return true;
     }
 
-    const htmlContent = generatePrintableHtml(element.innerHTML, title);
-    return printViaHiddenIframe(htmlContent);
+    return printElementInPlace(element, title);
   } catch (err) {
     console.warn('printDocument encountered an issue, falling back to window.print:', err);
     try {
@@ -33,6 +32,65 @@ export function printDocument(elementId?: string, title: string = 'Documento - C
     }
     return false;
   }
+}
+
+/**
+ * Prints a specific element using the CURRENT document (no nested iframe).
+ * This avoids the most common real-world failure of the old hidden-iframe approach:
+ * many browsers (and sandboxed/embedded preview environments) silently refuse to
+ * fire the print dialog from an offscreen/opacity:0 iframe, or the iframe's fresh
+ * document doesn't have time to load the app's stylesheets before print() is called.
+ * By reusing the current document and its already-loaded styles, printing becomes
+ * reliable across desktop, mobile, and embedded/preview contexts.
+ */
+function printElementInPlace(element: HTMLElement, title: string): boolean {
+  const overlay = document.createElement('div');
+  overlay.id = 'print-overlay-root';
+  overlay.innerHTML = element.innerHTML;
+  document.body.appendChild(overlay);
+
+  const styleTag = document.createElement('style');
+  styleTag.id = 'print-overlay-style';
+  styleTag.textContent = `
+    #print-overlay-root { display: none; }
+    @media print {
+      body > *:not(#print-overlay-root) { display: none !important; }
+      #print-overlay-root {
+        display: block !important;
+        position: static !important;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      @page { margin: 10mm 8mm; }
+    }
+  `;
+  document.head.appendChild(styleTag);
+
+  const prevTitle = document.title;
+  document.title = title;
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    document.title = prevTitle;
+    overlay.remove();
+    styleTag.remove();
+    window.removeEventListener('afterprint', cleanup);
+  };
+  window.addEventListener('afterprint', cleanup);
+
+  // Small delay lets the browser paint the overlay before the print dialog opens.
+  setTimeout(() => {
+    try {
+      window.print();
+    } finally {
+      // Safety net: some mobile browsers never fire 'afterprint'.
+      setTimeout(cleanup, 3000);
+    }
+  }, 60);
+
+  return true;
 }
 
 /**
