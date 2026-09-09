@@ -12,6 +12,7 @@ import {
   MessageCircle,
   HelpCircle,
   ArrowRight,
+  Trash2,
 } from 'lucide-react';
 
 interface QuoteCalculatorModalProps {
@@ -88,6 +89,27 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
     setAdditionals((prev) =>
       prev.map((a) => (a.id === id ? { ...a, price: Math.max(0, newPrice) } : a))
     );
+  };
+
+  const updateAdditionalName = (id: string, newName: string) => {
+    setAdditionals((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, name: newName } : a))
+    );
+  };
+
+  const removeAdditional = (id: string) => {
+    setAdditionals((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const addAdditional = () => {
+    const newItem: AdditionalItem = {
+      id: `custom-${Date.now()}`,
+      name: 'Nuevo servicio',
+      price: 0,
+      selected: false,
+      icon: '➕',
+    };
+    setAdditionals((prev) => [...prev, newItem]);
   };
 
   // Day label helper
@@ -355,11 +377,21 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
                       : 'bg-white border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0 pr-2">
-                    <span className="text-sm shrink-0">{item.icon}</span>
-                    <span className={`text-xs truncate ${item.selected ? 'font-bold text-slate-900' : 'text-slate-700'}`}>
-                      {item.name}
+                  <div className="flex items-center gap-2 min-w-0 pr-2 flex-1" onClick={(e) => e.stopPropagation()}>
+                    <span
+                      className="text-sm shrink-0 cursor-pointer"
+                      onClick={() => toggleAdditional(item.id)}
+                    >
+                      {item.icon}
                     </span>
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={(e) => updateAdditionalName(item.id, e.target.value)}
+                      className={`text-xs bg-transparent border-b border-transparent hover:border-slate-300 focus:border-pink-500 outline-hidden w-full min-w-0 ${
+                        item.selected ? 'font-bold text-slate-900' : 'text-slate-700'
+                      }`}
+                    />
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -378,10 +410,30 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
                       onChange={() => {}} // handled by parent div
                       className="w-4 h-4 text-pink-600 rounded border-slate-300 focus:ring-pink-500 cursor-pointer"
                     />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeAdditional(item.id);
+                      }}
+                      title="Eliminar servicio"
+                      className="p-1 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
+
+            <button
+              type="button"
+              onClick={addAdditional}
+              className="w-full flex items-center justify-center gap-1.5 p-2 rounded-xl border border-dashed border-slate-300 text-slate-500 hover:border-pink-400 hover:text-pink-600 hover:bg-pink-50/40 transition-all text-xs font-bold cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Agregar servicio adicional</span>
+            </button>
           </div>
 
           {/* Grand Total & Deposit Proposal */}
