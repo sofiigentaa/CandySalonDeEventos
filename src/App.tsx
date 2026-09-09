@@ -172,7 +172,12 @@ export default function App() {
 
   useEffect(() => {
     loadData();
-  }, [loadData, user]);
+    // Only run once on mount: events/reminders/expenses aren't scoped per-user,
+    // so refetching on every `user` reference change (which fires async right after
+    // Firebase resolves auth) was racing with optimistic local updates and could
+    // wipe out things like a just-registered expense before it reached the server.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadData]);
 
   // Sync to local storage whenever events change
   useEffect(() => {
