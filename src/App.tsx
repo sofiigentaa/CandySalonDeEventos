@@ -223,6 +223,11 @@ export default function App() {
     );
   };
 
+  const handleUpdateReminder = (updatedReminder: ReminderItem) => {
+    setReminders((prev) => prev.map((r) => (r.id === updatedReminder.id ? updatedReminder : r)));
+    saveReminderApi(updatedReminder);
+  };
+
   const handleDeleteReminder = (id: string) => {
     const target = reminders.find((r) => r.id === id);
     askConfirmation({
@@ -508,13 +513,13 @@ export default function App() {
       title: quoteData.title,
       clientName: '',
       clientPhone: '',
-      eventType: 'Cumpleaños Infantil',
+      eventType: 'Cumpleaños',
       eventDate: getTodayString(),
       eventTime: '17:00',
       totalAmount: quoteData.totalAmount,
       depositAmount: quoteData.depositAmount,
       paymentHistory: [],
-      status: 'reserved',
+      status: 'no_deposit',
       notes: quoteData.notes,
       location: 'Candy Salón de Eventos',
       guestCount: quoteData.guestCount,
@@ -647,6 +652,7 @@ export default function App() {
               totalCount={events.length}
               filteredCount={filteredEvents.length}
               onOpenNewEvent={handleOpenNewEvent}
+              isCalendarView={viewMode === 'calendar'}
             />
 
             {/* Content View: Table or Calendar */}
@@ -702,7 +708,7 @@ export default function App() {
             ) : (
               /* Monthly Calendar View */
               <CalendarView
-                events={events}
+                events={filteredEvents}
                 currency={currency}
                 onOpenReceiptModal={handleOpenReceiptModal}
                 onOpenNewEventWithDate={(dateStr) => handleOpenNewEvent(dateStr)}
@@ -782,6 +788,7 @@ export default function App() {
         events={events}
         currency={currency}
         onAddReminder={handleAddReminder}
+        onUpdateReminder={handleUpdateReminder}
         onToggleComplete={handleToggleCompleteReminder}
         onDeleteReminder={handleDeleteReminder}
         initialEventId={selectedEventIdForReminder}
