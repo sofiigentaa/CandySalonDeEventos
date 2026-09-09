@@ -23,6 +23,7 @@ interface ExpenseModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveExpense: (expense: ExpenseItem) => void;
+  onDeleteExpense?: (id: string) => void;
   initialExpense?: ExpenseItem | null;
   events: EventItem[];
   currency: string;
@@ -124,6 +125,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
   isOpen,
   onClose,
   onSaveExpense,
+  onDeleteExpense,
   initialExpense,
   events,
   currency,
@@ -261,8 +263,8 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
           </div>
 
           {/* Amount & Date */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 min-w-0">
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Monto del Egreso ({currency}) *
               </label>
@@ -278,12 +280,12 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                   placeholder="0"
                   value={amount === '' ? '' : amount}
                   onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full pl-14 pr-3.5 py-2.5 text-base bg-white border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-hidden transition-all"
+                  className="w-full box-border pl-14 pr-3.5 py-2.5 text-base bg-white border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-hidden transition-all"
                 />
               </div>
             </div>
 
-            <div>
+            <div className="flex-1 min-w-0">
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Fecha del Egreso *
               </label>
@@ -292,7 +294,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-hidden font-medium"
+                className="w-full box-border px-3.5 py-2.5 text-base bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-hidden font-medium"
               />
             </div>
           </div>
@@ -404,21 +406,37 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{initialExpense ? 'Guardar Cambios' : 'Registrar Egreso'}</span>
-            </button>
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
+            {initialExpense && onDeleteExpense ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteExpense(initialExpense.id);
+                  onClose();
+                }}
+                className="px-4 py-2.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+              >
+                Eliminar Egreso
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{initialExpense ? 'Guardar Cambios' : 'Registrar Egreso'}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
