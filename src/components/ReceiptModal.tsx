@@ -13,8 +13,6 @@ import { printDocument } from '../utils/printUtils';
 import {
   X,
   Printer,
-  Copy,
-  Check,
   MessageCircle,
   Calendar,
   Clock,
@@ -49,7 +47,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   onOpenContract,
   onOpenWhatsAppModal,
 }) => {
-  const [copied, setCopied] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
   if (!isOpen || !event) return null;
@@ -99,12 +96,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           .join('\n')
       : `1. Seña inicial: ${formatCurrency(event.depositAmount, currency)}`) +
     `\n\n¡Muchas gracias por confiar en *Candy Salón de Eventos*! ✨`;
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(summaryText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
-  };
 
   const handleWhatsApp = () => {
     if (onOpenWhatsAppModal) {
@@ -433,25 +424,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             >
               <Printer className={`w-3.5 h-3.5 text-pink-400 ${isPrinting ? 'animate-pulse' : ''}`} />
               <span>{isPrinting ? 'Abriendo Impresión...' : 'Imprimir Comprobante'}</span>
-            </button>
-
-            <button
-              id="btn-copy-receipt-summary"
-              type="button"
-              onClick={handleCopy}
-              title="Copiar texto del resumen"
-              className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shadow-2xs active:scale-95 transition-all cursor-pointer whitespace-nowrap ${
-                copied
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-              }`}
-            >
-              {copied ? (
-                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              ) : (
-                <Copy className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-              )}
-              <span>Copiar Resumen</span>
             </button>
 
             {onOpenContract && (
