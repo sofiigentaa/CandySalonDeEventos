@@ -18,7 +18,7 @@ import {
   getOrCreateUser,
   ensureTablesExist,
 } from './src/db/eventsService.ts';
-import { generateContractWithGemini } from './src/utils/aiContractService.ts';
+import { generateContractWithGemini, chatWithContractAssistant } from './src/utils/aiContractService.ts';
 
 async function startServer() {
   const app = express();
@@ -210,6 +210,29 @@ async function startServer() {
     } catch (error: any) {
       console.error('Error in contract AI endpoint:', error);
       res.status(500).json({ error: error.message || 'Error al generar contrato con IA' });
+    }
+  });
+
+  // AI CONTRACT ASSISTANT (conversational, guides the owner to draft specific clauses)
+  app.post('/api/ai/contract-assistant-chat', optionalAuth, async (req: AuthRequest, res) => {
+    try {
+      const { event, currency, contractText, history, message } = req.body;
+      if (!event || !message) {
+        return res.status(400).json({ error: 'Faltan datos para el asistente de contrato' });
+      }
+
+      const result = await chatWithContractAssistant(
+        event,
+        currency || '$',
+        contractText || '',
+        Array.isArray(history) ? history : [],
+        message
+      );
+
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error('Error in contract assistant chat endpoint:', error);
+      res.status(500).json({ error: error.message || 'Error en el asistente de IA' });
     }
   });
 

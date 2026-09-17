@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { EventItem } from '../types.ts';
 import {
   getDayOfWeekName,
@@ -16,6 +16,11 @@ import {
   Eye,
   ShieldCheck,
   Download,
+  Sparkles,
+  Bot,
+  Loader2,
+  PlusCircle,
+  User,
 } from 'lucide-react';
 
 interface ContractModalProps {
@@ -25,6 +30,16 @@ interface ContractModalProps {
   currency: string;
 }
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  clause?: string | null;
+}
+
+const ASSISTANT_WELCOME_MESSAGE =
+  'Contame qué querés agregar, aclarar o cambiar en el contrato (por ejemplo: una regla especial, una política de cancelación, un límite de horario) y te voy guiando para armar la cláusula.';
+
 export const ContractModal: React.FC<ContractModalProps> = ({
   isOpen,
   onClose,
@@ -32,17 +47,80 @@ export const ContractModal: React.FC<ContractModalProps> = ({
   currency,
 }) => {
   const [contractText, setContractText] = useState<string>('');
-  const [isEditingMode, setIsEditingMode] = useState<boolean>(true);
+  const [mode, setMode] = useState<'edit' | 'preview' | 'assistant'>('edit');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize with smart template on load or event change
   useEffect(() => {
     if (!isOpen || !event) return;
     const baseContract = generateSmartContractFallback(event, 'standard', '', currency);
     setContractText(baseContract);
-    setIsEditingMode(true);
+    setMode('edit');
+    setChatMessages([]);
+    setChatInput('');
+    setChatError(null);
   }, [event?.id, currency, isOpen]);
 
+  useEffect(() => {
+    if (mode === 'assistant' && chatMessages.length === 0) {
+      setChatMessages([{ id: 'welcome', role: 'assistant', text: ASSISTANT_WELCOME_MESSAGE }]);
+    }
+  }, [mode, chatMessages.length]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, isChatLoading]);
+
   if (!isOpen || !event) return null;
+
+  const handleSendChatMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || isChatLoading) return;
+
+    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: 'user', text };
+    const historyForRequest = chatMessages
+      .filter((m) => m.id !== 'welcome' || chatMessages.length > 1)
+      .map((m) => ({ role: m.role, text: m.text }));
+
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatInput('');
+    setChatError(null);
+    setIsChatLoading(true);
+
+    try {
+      const res = await fetch('/api/ai/contract-assistant-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event,
+          currency,
+          contractText,
+          history: historyForRequest,
+          message: text,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al conectar con el asistente');
+
+      setChatMessages((prev) => [
+        ...prev,
+        { id: `a-${Date.now()}`, role: 'assistant', text: data.reply, clause: data.clause || null },
+      ]);
+    } catch (err: any) {
+      setChatError(err.message || 'No se pudo contactar al asistente de IA.');
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  const handleInsertClause = (clause: string) => {
+    setContractText((prev) => `${prev.trim()}\n\n${clause.trim()}`);
+    setMode('edit');
+  };
 
   // Send Contract via WhatsApp
   const handleSendWhatsApp = () => {
@@ -90,13 +168,13 @@ export const ContractModal: React.FC<ContractModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Toggle Edit / Preview */}
+            {/* Toggle Edit / Preview / Asistente IA */}
             <div className="hidden sm:flex bg-slate-800 p-0.5 rounded-xl border border-slate-700">
               <button
                 type="button"
-                onClick={() => setIsEditingMode(true)}
+                onClick={() => setMode('edit')}
                 className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer ${
-                  isEditingMode ? 'bg-pink-600 text-white' : 'text-slate-300 hover:text-white'
+                  mode === 'edit' ? 'bg-pink-600 text-white' : 'text-slate-300 hover:text-white'
                 }`}
               >
                 <Edit3 className="w-3 h-3" />
@@ -104,13 +182,23 @@ export const ContractModal: React.FC<ContractModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setIsEditingMode(false)}
+                onClick={() => setMode('preview')}
                 className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer ${
-                  !isEditingMode ? 'bg-pink-600 text-white' : 'text-slate-300 hover:text-white'
+                  mode === 'preview' ? 'bg-pink-600 text-white' : 'text-slate-300 hover:text-white'
                 }`}
               >
                 <Eye className="w-3 h-3" />
                 <span>Vista Previa</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('assistant')}
+                className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors cursor-pointer ${
+                  mode === 'assistant' ? 'bg-pink-600 text-white' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Asistente IA</span>
               </button>
             </div>
 
@@ -124,30 +212,41 @@ export const ContractModal: React.FC<ContractModalProps> = ({
           </div>
         </div>
 
-        {/* Contract Content: Editor or Preview */}
+        {/* Contract Content: Editor, Preview or AI Assistant */}
         <div className="overflow-y-auto p-4 sm:p-6 flex-1 bg-slate-100 flex flex-col">
-          {/* Action notification and edit hints */}
+          {/* Action notification and mode hints */}
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2 px-1">
-            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-pink-600" />
-              <span>Contrato editable: puedes modificar cualquier texto o cláusula</span>
-            </span>
+            {mode === 'assistant' ? (
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-pink-600" />
+                <span>Asistente IA: contale qué cláusula querés armar y te va guiando</span>
+              </span>
+            ) : (
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-pink-600" />
+                <span>Contrato editable: puedes modificar cualquier texto o cláusula</span>
+              </span>
+            )}
 
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-500 font-medium">
-                {contractText.length} caracteres
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsEditingMode(!isEditingMode)}
-                className="text-xs font-bold text-pink-600 hover:text-pink-700 underline cursor-pointer sm:hidden"
+              {mode !== 'assistant' && (
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {contractText.length} caracteres
+                </span>
+              )}
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value as 'edit' | 'preview' | 'assistant')}
+                className="sm:hidden text-xs font-bold text-pink-600 bg-white border border-pink-200 rounded-lg px-1.5 py-1 cursor-pointer"
               >
-                {isEditingMode ? 'Ver formato' : 'Editar texto'}
-              </button>
+                <option value="edit">Editar</option>
+                <option value="preview">Vista Previa</option>
+                <option value="assistant">Asistente IA</option>
+              </select>
             </div>
           </div>
 
-          {isEditingMode ? (
+          {mode === 'edit' && (
             /* Direct Textarea Editor */
             <div className="relative flex-1 flex flex-col min-h-[360px]">
               <textarea
@@ -157,10 +256,107 @@ export const ContractModal: React.FC<ContractModalProps> = ({
                 className="w-full flex-1 min-h-[380px] p-4 rounded-2xl text-xs font-mono leading-relaxed outline-hidden shadow-xs resize-y transition-all bg-white border-2 border-pink-200/90 text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-400/20"
               />
             </div>
-          ) : (
+          )}
+
+          {mode === 'preview' && (
             /* Document Preview */
             <div className="p-6 sm:p-8 rounded-2xl max-w-2xl mx-auto w-full text-xs font-mono leading-relaxed whitespace-pre-wrap transition-all bg-white border border-slate-200 text-slate-900 shadow-xs">
               {contractText}
+            </div>
+          )}
+
+          {mode === 'assistant' && (
+            /* AI Assistant Chat */
+            <div className="flex-1 flex flex-col min-h-[360px] bg-white rounded-2xl border-2 border-pink-200/90 shadow-xs overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {chatMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+                  >
+                    <div
+                      className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center ${
+                        msg.role === 'user'
+                          ? 'bg-slate-800 text-white'
+                          : 'bg-pink-100 text-pink-600 border border-pink-200'
+                      }`}
+                    >
+                      {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                    </div>
+                    <div className={`max-w-[80%] flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      <div
+                        className={`px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap ${
+                          msg.role === 'user'
+                            ? 'bg-slate-800 text-white rounded-tr-sm'
+                            : 'bg-slate-100 text-slate-800 rounded-tl-sm'
+                        }`}
+                      >
+                        {msg.text}
+                      </div>
+                      {msg.clause && (
+                        <div className="w-full p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                          <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">
+                            Cláusula propuesta
+                          </p>
+                          <p className="text-xs text-emerald-950 whitespace-pre-wrap leading-relaxed mb-2">
+                            {msg.clause}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleInsertClause(msg.clause as string)}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>Insertar en el contrato</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {isChatLoading && (
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <div className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center bg-pink-100 text-pink-600 border border-pink-200">
+                      <Bot className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-slate-100 text-xs flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Pensando la cláusula...</span>
+                    </div>
+                  </div>
+                )}
+
+                {chatError && (
+                  <p className="text-[11px] text-red-600 font-medium px-1">{chatError}</p>
+                )}
+
+                <div ref={chatEndRef} />
+              </div>
+
+              <div className="border-t border-slate-200 p-3 flex items-center gap-2 shrink-0 bg-slate-50">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendChatMessage();
+                    }
+                  }}
+                  placeholder="Ej: quiero que se aclare que no se permiten mascotas..."
+                  className="flex-1 px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 focus:outline-hidden"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendChatMessage}
+                  disabled={!chatInput.trim() || isChatLoading}
+                  className="p-2.5 bg-pink-600 hover:bg-pink-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-colors cursor-pointer shrink-0"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>

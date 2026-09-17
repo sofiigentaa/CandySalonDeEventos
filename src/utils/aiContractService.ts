@@ -7,6 +7,17 @@ import {
 
 export { generateSmartContractFallback, type GenerateContractOptions };
 
+export interface ContractChatMessage {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface ContractChatResult {
+  reply: string;
+  clause: string | null;
+  source: 'gemini' | 'fallback';
+}
+
 let aiClient: GoogleGenAI | null = null;
 
 function getAiClient(): GoogleGenAI | null {
@@ -25,6 +36,19 @@ function getAiClient(): GoogleGenAI | null {
     });
   }
   return aiClient;
+}
+
+// Modelos vigentes de Gemini (se saca "gemini-3.8-flash", que no existe y hacía perder tiempo
+// fallando siempre antes de pasar al siguiente modelo). Se usa un único modelo rápido por defecto
+// y un solo respaldo, con timeout corto, para que la generación no quede "colgada".
+const CANDIDATE_MODELS = ['gemini-flash-latest', 'gemini-3.1-flash-lite'];
+const TIMEOUT_MS = 12000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), ms)),
+  ]);
 }
 
 export async function generateContractWithGemini(
@@ -83,19 +107,7 @@ REGLAS LEGALES INDISPENSABLES QUE DEBES INCLUIR CON CLARIDAD:
 
 Formato: Devuelve únicamente el texto del contrato listo para enviar o imprimir, con un encabezado prolijo, títulos claros en mayúsculas y cláusulas numeradas en español rioplatense formal y cordial.`;
 
-  // Modelos vigentes de Gemini (se saca "gemini-3.8-flash", que no existe y hacía perder tiempo
-  // fallando siempre antes de pasar al siguiente modelo). Se usa un único modelo rápido por defecto
-  // y un solo respaldo, con timeout corto, para que la generación no quede "colgada".
-  const candidateModels = ['gemini-flash-latest', 'gemini-3.1-flash-lite'];
-  const TIMEOUT_MS = 12000;
-
-  const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
-    Promise.race([
-      promise,
-      new Promise<T>((_, reject) => setTimeout(() => reject(new Error('AI request timeout')), ms)),
-    ]);
-
-  for (const modelName of candidateModels) {
+  for (const modelName of CANDIDATE_MODELS) {
     try {
       const response = await withTimeout(
         ai.models.generateContent({
@@ -120,6 +132,101 @@ Formato: Devuelve únicamente el texto del contrato listo para enviar o imprimir
 
   return {
     contractText: generateSmartContractFallback(event, focusTone, customInstructions, currency),
+    source: 'fallback',
+  };
+}
+
+const CONTRACT_ASSISTANT_UNAVAILABLE_REPLY =
+  'El asistente de IA no está disponible en este momento (falta configurar la clave de API de Gemini). Mientras tanto podés escribir la cláusula directamente en el editor.';
+
+/**
+ * Chatea con la dueña del salón, turno a turno, para ayudarla a redactar
+ * cláusulas o secciones específicas del contrato. El modelo responde siempre
+ * con un mensaje conversacional y, opcionalmente, un texto de cláusula listo
+ * para insertar en el contrato.
+ */
+export async function chatWithContractAssistant(
+  event: EventItem,
+  currency: string,
+  currentContractText: string,
+  history: ContractChatMessage[],
+  userMessage: string
+): Promise<ContractChatResult> {
+  const ai = getAiClient();
+  if (!ai) {
+    return { reply: CONTRACT_ASSISTANT_UNAVAILABLE_REPLY, clause: null, source: 'fallback' };
+  }
+
+  const total = Number(event.totalAmount) || 0;
+  const deposit = Number(event.depositAmount) || 0;
+  const remaining = Math.max(0, total - deposit);
+  const trimmedContract = (currentContractText || '').slice(0, 4000);
+
+  const systemInstruction = `Sos el asistente de redacción de contratos de "Candy Salón de Eventos" (salón de fiestas). Chateás directamente con la dueña del salón para ayudarla a definir y redactar partes puntuales del contrato de alquiler (cláusulas, reglas, condiciones especiales), NO con el cliente final.
+
+Cómo conversar:
+- Hablá en español rioplatense, cercano, breve y concreto (nada de rodeos).
+- Si el pedido de la dueña ya es suficientemente claro para redactar una cláusula precisa, redactala directamente sin seguir preguntando de más.
+- Si falta información clave para que la cláusula sea precisa (montos, plazos, objetos prohibidos, excepciones, etc.), hacé como máximo 1 o 2 preguntas cortas y puntuales antes de redactar.
+- No repitas cláusulas que ya están en el contrato actual (te lo paso más abajo); si lo que pide ya está cubierto, avisale y no dupliques.
+
+Datos del evento para dar contexto si hace falta:
+- Cliente: ${event.clientName || 'Cliente'} | Evento: ${event.title} (${event.eventType || 'Evento Social'})
+- Fecha: ${event.eventDate} ${event.eventTime ? `a las ${event.eventTime} hs` : ''}
+- Monto total: ${currency} ${total} | Seña: ${currency} ${deposit} | Saldo: ${currency} ${remaining}
+- Invitados: ${event.guestCount || 'No especificado'}
+
+Contrato actual (para contexto, no lo repitas):
+"""
+${trimmedContract || '(Todavía no hay texto cargado)'}
+"""
+
+Formato de respuesta OBLIGATORIO, siempre exactamente así, sin texto antes ni después:
+RESPUESTA: <tu mensaje conversacional para la dueña: una pregunta breve o una confirmación de que la cláusula está lista>
+CLAUSULA: <el texto de la cláusula lista para pegar en el contrato, numerada/titulada si corresponde, en español formal-cordial> (si todavía no corresponde proponer texto, escribí la palabra NINGUNA en este campo)`;
+
+  const contents = [
+    ...history.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.text }],
+    })),
+    { role: 'user', parts: [{ text: userMessage }] },
+  ];
+
+  for (const modelName of CANDIDATE_MODELS) {
+    try {
+      const response = await withTimeout(
+        ai.models.generateContent({
+          model: modelName,
+          contents,
+          config: {
+            systemInstruction,
+            maxOutputTokens: 700,
+          },
+        }),
+        TIMEOUT_MS
+      );
+
+      const raw = response.text?.trim();
+      if (!raw) continue;
+
+      const match = raw.match(/RESPUESTA:\s*([\s\S]*?)\n\s*CLAUSULA:\s*([\s\S]*)$/i);
+      if (match) {
+        const reply = match[1].trim();
+        const clauseRaw = match[2].trim();
+        const clause = clauseRaw && clauseRaw.toUpperCase() !== 'NINGUNA' ? clauseRaw : null;
+        return { reply, clause, source: 'gemini' };
+      }
+
+      return { reply: raw, clause: null, source: 'gemini' };
+    } catch (error: any) {
+      continue;
+    }
+  }
+
+  return {
+    reply: 'No pude conectarme con la IA en este momento. Probá de nuevo en unos segundos.',
+    clause: null,
     source: 'fallback',
   };
 }
