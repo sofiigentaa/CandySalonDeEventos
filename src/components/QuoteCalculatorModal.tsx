@@ -36,6 +36,14 @@ interface AdditionalItem {
   icon: string;
 }
 
+const EMOJI_OPTIONS = [
+  '🎉', '🎈', '🎊', '🎂', '🍰', '🧁', '🍭', '🍬', '🍫', '🍿',
+  '🍔', '🌭', '🍕', '🥤', '☕', '🧃', '🍹', '🎁', '🎵', '🎤',
+  '🎧', '🎮', '🧸', '🐰', '🦄', '🌈', '✨', '🎇', '🎆', '🕯️',
+  '👑', '💃', '🕺', '🎪', '🏰', '🎠', '🎡', '🎢', '📸', '💐',
+  '🌸', '⭐', '💫', '🔥', '💧', '⏰', '📅', '✅', '➕', '🎨',
+];
+
 export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
   isOpen,
   onClose,
@@ -67,6 +75,7 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
 
   const [depositPercent, setDepositPercent] = useState<number>(30); // 30% o 50%
   const [copied, setCopied] = useState(false);
+  const [emojiPickerOpenId, setEmojiPickerOpenId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -94,6 +103,12 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
   const updateAdditionalName = (id: string, newName: string) => {
     setAdditionals((prev) =>
       prev.map((a) => (a.id === id ? { ...a, name: newName } : a))
+    );
+  };
+
+  const updateAdditionalIcon = (id: string, newIcon: string) => {
+    setAdditionals((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, icon: newIcon } : a))
     );
   };
 
@@ -378,12 +393,41 @@ export const QuoteCalculatorModal: React.FC<QuoteCalculatorModalProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0 pr-2 flex-1" onClick={(e) => e.stopPropagation()}>
-                    <span
-                      className="text-sm shrink-0 cursor-pointer"
-                      onClick={() => toggleAdditional(item.id)}
-                    >
-                      {item.icon}
-                    </span>
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        title="Elegir ícono"
+                        onClick={() =>
+                          setEmojiPickerOpenId((prev) => (prev === item.id ? null : item.id))
+                        }
+                        className="text-sm w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 cursor-pointer transition-colors"
+                      >
+                        {item.icon}
+                      </button>
+                      {emojiPickerOpenId === item.id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-30"
+                            onClick={() => setEmojiPickerOpenId(null)}
+                          />
+                          <div className="absolute z-40 top-full left-0 mt-1 w-52 max-h-40 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-xl shadow-lg grid grid-cols-7 gap-0.5">
+                            {EMOJI_OPTIONS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => {
+                                  updateAdditionalIcon(item.id, emoji);
+                                  setEmojiPickerOpenId(null);
+                                }}
+                                className="text-base leading-none p-1 rounded-md hover:bg-pink-50 cursor-pointer"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <input
                       type="text"
                       value={item.name}
