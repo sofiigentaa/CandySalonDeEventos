@@ -21,6 +21,8 @@ import {
   exportPlainTextContingencyReport,
   exportEventsCSV,
   BackupPayload,
+  BACKUP_JSON_START_MARKER,
+  BACKUP_JSON_END_MARKER,
 } from '../utils/backupUtils.ts';
 import { getRemainingBalance } from '../utils/dateUtils.ts';
 
@@ -81,7 +83,22 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     reader.onload = async (e) => {
       try {
         const text = e.target?.result as string;
-        const parsed = JSON.parse(text) as BackupPayload;
+
+        const startIdx = text.indexOf(BACKUP_JSON_START_MARKER);
+        const endIdx = text.indexOf(BACKUP_JSON_END_MARKER);
+        const jsonText =
+          startIdx !== -1 && endIdx !== -1
+            ? text.slice(startIdx + BACKUP_JSON_START_MARKER.length, endIdx).trim()
+            : text.trim();
+
+        let parsed: BackupPayload;
+        try {
+          parsed = JSON.parse(jsonText) as BackupPayload;
+        } catch {
+          throw new Error(
+            'No se encontraron datos de respaldo en este archivo. Usá el archivo .TXT descargado con el botón "Reporte Plano (.TXT)" de esta misma pantalla.'
+          );
+        }
 
         if (!parsed || (!Array.isArray(parsed.events) && !Array.isArray((parsed as any).data))) {
           throw new Error('El archivo no tiene el formato de respaldo válido de Candy Salón.');
@@ -277,14 +294,14 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           <div className="border-t border-slate-200 pt-5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
               <Upload className="w-4 h-4 text-slate-600" />
-              <span>2. Restaurar desde un Archivo de Respaldo previo (.JSON)</span>
+              <span>2. Restaurar desde un Archivo de Respaldo previo (.TXT)</span>
             </h3>
 
             <div className="bg-slate-50 border border-dashed border-slate-300 rounded-2xl p-4 sm:p-5 text-center">
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json"
+                accept=".txt"
                 onChange={handleFileUpload}
                 className="hidden"
                 id="file-backup-upload-input"
@@ -298,7 +315,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   ¿Tuviste un problema con la base de datos o cambiaste de equipo?
                 </p>
                 <p className="text-[11px] text-slate-500 max-w-md mt-0.5 mb-3">
-                  Selecciona tu archivo <code className="bg-slate-200/80 px-1 py-0.5 rounded text-[10px] font-mono text-slate-700">respaldo-candy-salon-contingencia.json</code> para restablecer todos tus eventos y gastos.
+                  Selecciona el archivo <code className="bg-slate-200/80 px-1 py-0.5 rounded text-[10px] font-mono text-slate-700">reporte-plano-candy-salon-....txt</code> descargado con el botón "Reporte Plano (.TXT)" para restablecer todos tus eventos y gastos.
                 </p>
 
                 <button
@@ -309,7 +326,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>{isRestoring ? 'Leyendo respaldo...' : 'Seleccionar Archivo de Respaldo (.JSON)'}</span>
+                  <span>{isRestoring ? 'Leyendo respaldo...' : 'Seleccionar Archivo de Respaldo (.TXT)'}</span>
                 </button>
               </div>
             </div>

@@ -86,9 +86,14 @@ export function exportFullJsonBackup(
   return payload;
 }
 
+export const BACKUP_JSON_START_MARKER = '===RESPALDO_DATOS_INICIO (no editar)===';
+export const BACKUP_JSON_END_MARKER = '===RESPALDO_DATOS_FIN===';
+
 /**
- * Generates and downloads a readable plain text contingency report (.txt)
+ * Generates and downloads a readable plain text contingency report (.txt).
  * Perfect for offline reading in notepad, printing, or sending during internet/system emergencies.
+ * It also embeds the full structured backup data at the end (between markers) so this
+ * same .txt file can be used to restore everything from "2. Restaurar desde un Archivo de Respaldo".
  */
 export function exportPlainTextContingencyReport(
   events: EventItem[],
@@ -192,6 +197,36 @@ export function exportPlainTextContingencyReport(
   report += `\n========================================================================\n`;
   report += `FIN DEL REPORTE PLANO DE CONTINGENCIA - CANDY SALÓN DE EVENTOS\n`;
   report += `========================================================================\n`;
+
+  // Datos completos embebidos para poder restaurar este mismo archivo .txt
+  // desde "2. Restaurar desde un Archivo de Respaldo". No se muestra en pantalla,
+  // pero queda guardado dentro del archivo de texto para no perder información.
+  const totalExpensesPaid = totalExpenses;
+  const netProfit = totalCollected - totalExpensesPaid;
+  const backupPayload: BackupPayload = {
+    exportVersion: '1.0',
+    exportDate: now.toISOString(),
+    exportTimestamp: now.getTime(),
+    appName: 'Candy Salón de Eventos',
+    system: 'Sistema de Gestión Integral de Eventos',
+    summary: {
+      totalEvents: events.length,
+      totalExpenses: expenses.length,
+      totalReminders: reminders.length,
+      totalContracted,
+      totalCollected,
+      totalPendingBalance: totalPending,
+      totalExpensesPaid,
+      netProfit,
+    },
+    events,
+    expenses,
+    reminders,
+  };
+
+  report += `\n${BACKUP_JSON_START_MARKER}\n`;
+  report += JSON.stringify(backupPayload);
+  report += `\n${BACKUP_JSON_END_MARKER}\n`;
 
   const filename = `reporte-plano-candy-salon-${now.toISOString().split('T')[0]}.txt`;
   downloadFile(report, filename, 'text/plain;charset=utf-8');
