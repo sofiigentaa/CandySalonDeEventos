@@ -1622,28 +1622,8 @@ export const EventModal: React.FC<EventModalProps> = ({
               })}
             </div>
 
-            {/* Quick Actions & Add Button */}
-            <div className="pt-2 flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-bold text-slate-500 mr-1">
-                  Atajos rápidos:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleAddCustomReminder('proveedores')}
-                  className="px-2 py-1 rounded-lg bg-white hover:bg-indigo-50 border border-slate-200 text-[11px] font-semibold text-slate-700 hover:text-indigo-700 transition-colors cursor-pointer"
-                >
-                  + 🍽️ Proveedores (5d)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddCustomReminder('llamada')}
-                  className="px-2 py-1 rounded-lg bg-white hover:bg-indigo-50 border border-slate-200 text-[11px] font-semibold text-slate-700 hover:text-indigo-700 transition-colors cursor-pointer"
-                >
-                  + 📞 Llamar Cliente (1d)
-                </button>
-              </div>
-
+            {/* Add Button */}
+            <div className="pt-2 flex items-center justify-end flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => handleAddCustomReminder('custom')}
