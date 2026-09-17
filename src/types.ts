@@ -26,7 +26,7 @@ export interface PaymentRecord {
   date: string;
   amount: number;
   method: PaymentMethod;
-  concept: PaymentConcept;
+  concept: string;
   notes?: string;
   receiptNumber?: string;
 }

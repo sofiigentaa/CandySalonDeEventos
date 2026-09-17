@@ -44,7 +44,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [amount, setAmount] = useState<number | ''>('');
   const [date, setDate] = useState(getTodayString());
   const [method, setMethod] = useState<PaymentMethod>('Transferencia');
-  const [concept, setConcept] = useState<PaymentConcept>('Abono parcial');
+  const [concept, setConcept] = useState<string>('Abono parcial');
   const [notes, setNotes] = useState('');
 
   if (!isOpen || !event) return null;
@@ -69,12 +69,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       return;
     }
 
+    const trimmedConcept = concept.trim();
+    if (!trimmedConcept) {
+      alert('Por favor ingresa un concepto.');
+      return;
+    }
+
     const newPayment: PaymentRecord = {
       id: `pay-${Date.now()}`,
       date,
       amount: numAmount,
       method,
-      concept: isCancellingTotal ? 'Pago final' : concept,
+      concept: isCancellingTotal ? 'Pago final' : trimmedConcept,
       notes: notes.trim() || undefined,
       receiptNumber: `REC-${Math.floor(1000 + Math.random() * 9000)}`,
     };
@@ -186,17 +192,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Concepto
               </label>
-              <select
+              <input
+                type="text"
+                list="concept-suggestions"
+                required
+                placeholder="Ej. Abono parcial"
                 value={concept}
-                onChange={(e) => setConcept(e.target.value as PaymentConcept)}
+                onChange={(e) => setConcept(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-hidden font-medium"
-              >
+              />
+              <datalist id="concept-suggestions">
                 {CONCEPTS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
+                  <option key={c} value={c} />
                 ))}
-              </select>
+              </datalist>
             </div>
           </div>
 
