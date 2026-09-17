@@ -54,22 +54,24 @@ export const EventFilters: React.FC<EventFiltersProps> = ({
         {/* Action Controls: Sort & Create Event Button */}
         <div className="flex items-center gap-2 justify-between sm:justify-end">
           {/* Sort selector */}
-          <div className="flex items-center gap-1.5">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap hidden md:inline">Ordenar:</span>
-            <select
-              id="select-sort-events"
-              value={sortOption}
-              onChange={(e) => onSortOptionChange(e.target.value as SortOption)}
-              className="text-[11px] font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 cursor-pointer"
-            >
-              <option value="date_asc">Fecha más próxima</option>
-              <option value="date_desc">Fecha más lejana</option>
-              <option value="balance_desc">Mayor saldo pendiente</option>
-              <option value="total_desc">Mayor monto total</option>
-              {!isCalendarView && <option value="client_asc">Cliente (A-Z)</option>}
-            </select>
-          </div>
+          {!isCalendarView && (
+            <div className="flex items-center gap-1.5">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[11px] font-semibold text-slate-500 whitespace-nowrap hidden md:inline">Ordenar:</span>
+              <select
+                id="select-sort-events"
+                value={sortOption}
+                onChange={(e) => onSortOptionChange(e.target.value as SortOption)}
+                className="text-[11px] font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 cursor-pointer"
+              >
+                <option value="date_asc">Fecha más próxima</option>
+                <option value="date_desc">Fecha más lejana</option>
+                <option value="balance_desc">Mayor saldo pendiente</option>
+                <option value="total_desc">Mayor monto total</option>
+                <option value="client_asc">Cliente (A-Z)</option>
+              </select>
+            </div>
+          )}
 
           {/* Botón Crear Evento */}
           {onOpenNewEvent && (
