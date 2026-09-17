@@ -14,9 +14,19 @@ export interface ContractChatMessage {
 
 export interface ContractChatResult {
   reply: string;
-  clause: string | null;
+  proposedText: string | null;
+  scope: 'full_contract' | 'clause' | null;
   source: 'gemini' | 'fallback';
 }
+
+const LEGAL_RULES_TEXT = `REGLAS LEGALES INDISPENSABLES QUE DEBES INCLUIR CON CLARIDAD EN UN CONTRATO COMPLETO:
+1. Objeto del contrato y datos completos de ambas partes.
+2. Cláusula de Seña: Seña no reembolsable ni transferible ante cancelación por parte del cliente, ya que garantiza exclusividad y bloqueo de agenda.
+3. Pago del Saldo: Debe estar 100% saldado 48 hs antes o en la puerta al ingresar al salón, sin excepciones.
+4. Horarios y Tolerancia: Ingreso 30 min antes para ambientación; horario de salida con 15 minutos de tolerancia para desalojo total. Excedido este tiempo se devenga hora extra.
+5. Responsabilidad por Daños y Roturas: El cliente es el responsable económico de todo daño o rotura en juegos, inflables, pelotero, vajilla o mobiliario.
+6. Elementos Expresamente Prohibidos: Nieve/espuma en aerosol, serpentina líquida, papel picado metálico, pirotecnia y adhesivos agresivos en paredes.
+7. Sección final con líneas de firma para el Contratante (Nombre, DNI, Teléfono) y para Candy Salón de Eventos.`;
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -96,14 +106,7 @@ ${
 }
 ${customInstructions ? `INSTRUCCIÓN ESPECIAL OBLIGATORIA DE LA DUEÑA DEL SALÓN (debe quedar reflejada como una cláusula propia y explícita del contrato, no como una mención de paso): "${customInstructions}"` : ''}
 
-REGLAS LEGALES INDISPENSABLES QUE DEBES INCLUIR CON CLARIDAD:
-1. Objeto del contrato y datos completos de ambas partes.
-2. Cláusula de Seña: Seña no reembolsable ni transferible ante cancelación por parte del cliente, ya que garantiza exclusividad y bloqueo de agenda.
-3. Pago del Saldo: Debe estar 100% saldado 48 hs antes o en la puerta al ingresar al salón, sin excepciones.
-4. Horarios y Tolerancia: Ingreso 30 min antes para ambientación; horario de salida con 15 minutos de tolerancia para desalojo total. Excedido este tiempo se devenga hora extra.
-5. Responsabilidad por Daños y Roturas: El cliente es el responsable económico de todo daño o rotura en juegos, inflables, pelotero, vajilla o mobiliario.
-6. Elementos Expresamente Prohibidos: Nieve/espuma en aerosol, serpentina líquida, papel picado metálico, pirotecnia y adhesivos agresivos en paredes.
-7. Sección final con líneas de firma para el Contratante (Nombre, DNI, Teléfono) y para Candy Salón de Eventos.
+${LEGAL_RULES_TEXT}
 
 Formato: Devuelve únicamente el texto del contrato listo para enviar o imprimir, con un encabezado prolijo, títulos claros en mayúsculas y cláusulas numeradas en español rioplatense formal y cordial.`;
 
@@ -137,13 +140,14 @@ Formato: Devuelve únicamente el texto del contrato listo para enviar o imprimir
 }
 
 const CONTRACT_ASSISTANT_UNAVAILABLE_REPLY =
-  'El asistente de IA no está disponible en este momento (falta configurar la clave de API de Gemini). Mientras tanto podés escribir la cláusula directamente en el editor.';
+  'El asistente de IA no está disponible en este momento (falta configurar la clave de API de Gemini). Mientras tanto podés escribir el contrato directamente en el editor.';
 
 /**
- * Chatea con la dueña del salón, turno a turno, para ayudarla a redactar
- * cláusulas o secciones específicas del contrato. El modelo responde siempre
- * con un mensaje conversacional y, opcionalmente, un texto de cláusula listo
- * para insertar en el contrato.
+ * Chatea con la dueña del salón, turno a turno, para ayudarla a iniciar el
+ * contrato completo de un evento o para redactar cláusulas puntuales sobre
+ * uno ya existente. El modelo responde siempre con un mensaje conversacional
+ * y, opcionalmente, un texto listo para usar: puede ser el CONTRATO COMPLETO
+ * (reemplaza el texto actual) o una CLÁUSULA puntual (se agrega al final).
  */
 export async function chatWithContractAssistant(
   event: EventItem,
@@ -154,7 +158,7 @@ export async function chatWithContractAssistant(
 ): Promise<ContractChatResult> {
   const ai = getAiClient();
   if (!ai) {
-    return { reply: CONTRACT_ASSISTANT_UNAVAILABLE_REPLY, clause: null, source: 'fallback' };
+    return { reply: CONTRACT_ASSISTANT_UNAVAILABLE_REPLY, proposedText: null, scope: null, source: 'fallback' };
   }
 
   const total = Number(event.totalAmount) || 0;
@@ -162,28 +166,34 @@ export async function chatWithContractAssistant(
   const remaining = Math.max(0, total - deposit);
   const trimmedContract = (currentContractText || '').slice(0, 4000);
 
-  const systemInstruction = `Sos el asistente de redacción de contratos de "Candy Salón de Eventos" (salón de fiestas). Chateás directamente con la dueña del salón para ayudarla a definir y redactar partes puntuales del contrato de alquiler (cláusulas, reglas, condiciones especiales), NO con el cliente final.
+  const systemInstruction = `Sos el asistente de redacción de contratos de "Candy Salón de Eventos" (salón de fiestas). Chateás directamente con la dueña del salón, NO con el cliente final. La ayudás a hacer dos cosas:
+(a) INICIAR/REGENERAR el contrato completo de un evento desde cero, guiándola con preguntas breves, o
+(b) redactar una cláusula puntual para sumar al contrato que ya tiene armado.
 
 Cómo conversar:
 - Hablá en español rioplatense, cercano, breve y concreto (nada de rodeos).
-- Si el pedido de la dueña ya es suficientemente claro para redactar una cláusula precisa, redactala directamente sin seguir preguntando de más.
-- Si falta información clave para que la cláusula sea precisa (montos, plazos, objetos prohibidos, excepciones, etc.), hacé como máximo 1 o 2 preguntas cortas y puntuales antes de redactar.
-- No repitas cláusulas que ya están en el contrato actual (te lo paso más abajo); si lo que pide ya está cubierto, avisale y no dupliques.
+- Si la dueña pide iniciar, armar o regenerar "el contrato" completo para este evento: preguntale primero (en una sola pregunta corta) el enfoque/tono que quiere (estándar y equilibrado, reglas estrictas sobre daños y horarios, fiesta infantil con pelotero/inflables, o adolescentes/adultos con control de sonido y consumo) y si hay alguna instrucción especial que deba quedar como cláusula propia. En cuanto tengas esa info (o si ya te la dio en el primer mensaje), generá el CONTRATO COMPLETO siguiendo las reglas legales indispensables de más abajo, y marcá el ALCANCE como CONTRATO_COMPLETO.
+- Si el pedido es sobre un aspecto puntual (una cláusula, una regla específica) y no sobre todo el documento: si ya es suficientemente claro, redactala directamente; si falta info clave (montos, plazos, excepciones), hacé como máximo 1 o 2 preguntas cortas antes de redactar. Marcá el ALCANCE como CLAUSULA. No repitas cláusulas que ya están en el contrato actual.
+- Si todavía no corresponde proponer texto (te falta información), usá ALCANCE: NINGUNO y TEXTO: NINGUNO.
 
-Datos del evento para dar contexto si hace falta:
+${LEGAL_RULES_TEXT}
+(Esta lista de reglas legales indispensables solo aplica cuando el ALCANCE es CONTRATO_COMPLETO; para una CLAUSULA puntual redactá solo lo pedido.)
+
+Datos del evento para dar contexto:
 - Cliente: ${event.clientName || 'Cliente'} | Evento: ${event.title} (${event.eventType || 'Evento Social'})
 - Fecha: ${event.eventDate} ${event.eventTime ? `a las ${event.eventTime} hs` : ''}
 - Monto total: ${currency} ${total} | Seña: ${currency} ${deposit} | Saldo: ${currency} ${remaining}
 - Invitados: ${event.guestCount || 'No especificado'}
 
-Contrato actual (para contexto, no lo repitas):
+Contrato actual (para contexto, no lo repitas ni lo cites salvo que te pidan regenerarlo):
 """
 ${trimmedContract || '(Todavía no hay texto cargado)'}
 """
 
 Formato de respuesta OBLIGATORIO, siempre exactamente así, sin texto antes ni después:
-RESPUESTA: <tu mensaje conversacional para la dueña: una pregunta breve o una confirmación de que la cláusula está lista>
-CLAUSULA: <el texto de la cláusula lista para pegar en el contrato, numerada/titulada si corresponde, en español formal-cordial> (si todavía no corresponde proponer texto, escribí la palabra NINGUNA en este campo)`;
+RESPUESTA: <tu mensaje conversacional para la dueña: una pregunta breve o una confirmación de que el texto está listo>
+ALCANCE: <CONTRATO_COMPLETO, CLAUSULA o NINGUNO>
+TEXTO: <el contrato completo o la cláusula lista para usar, en español formal-cordial> (si ALCANCE es NINGUNO, escribí NINGUNA acá también)`;
 
   const contents = [
     ...history.map((m) => ({
@@ -201,7 +211,7 @@ CLAUSULA: <el texto de la cláusula lista para pegar en el contrato, numerada/ti
           contents,
           config: {
             systemInstruction,
-            maxOutputTokens: 700,
+            maxOutputTokens: 1600,
           },
         }),
         TIMEOUT_MS
@@ -210,15 +220,21 @@ CLAUSULA: <el texto de la cláusula lista para pegar en el contrato, numerada/ti
       const raw = response.text?.trim();
       if (!raw) continue;
 
-      const match = raw.match(/RESPUESTA:\s*([\s\S]*?)\n\s*CLAUSULA:\s*([\s\S]*)$/i);
+      const match = raw.match(/RESPUESTA:\s*([\s\S]*?)\n\s*ALCANCE:\s*(\S+)\s*\n\s*TEXTO:\s*([\s\S]*)$/i);
       if (match) {
         const reply = match[1].trim();
-        const clauseRaw = match[2].trim();
-        const clause = clauseRaw && clauseRaw.toUpperCase() !== 'NINGUNA' ? clauseRaw : null;
-        return { reply, clause, source: 'gemini' };
+        const scopeRaw = match[2].trim().toUpperCase();
+        const textRaw = match[3].trim();
+        const hasText = textRaw && textRaw.toUpperCase() !== 'NINGUNA' && textRaw.toUpperCase() !== 'NINGUNO';
+        const scope: ContractChatResult['scope'] = !hasText
+          ? null
+          : scopeRaw === 'CONTRATO_COMPLETO'
+          ? 'full_contract'
+          : 'clause';
+        return { reply, proposedText: hasText ? textRaw : null, scope, source: 'gemini' };
       }
 
-      return { reply: raw, clause: null, source: 'gemini' };
+      return { reply: raw, proposedText: null, scope: null, source: 'gemini' };
     } catch (error: any) {
       continue;
     }
@@ -226,7 +242,8 @@ CLAUSULA: <el texto de la cláusula lista para pegar en el contrato, numerada/ti
 
   return {
     reply: 'No pude conectarme con la IA en este momento. Probá de nuevo en unos segundos.',
-    clause: null,
+    proposedText: null,
+    scope: null,
     source: 'fallback',
   };
 }

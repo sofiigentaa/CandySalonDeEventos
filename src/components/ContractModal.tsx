@@ -34,11 +34,17 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
-  clause?: string | null;
+  proposedText?: string | null;
+  scope?: 'full_contract' | 'clause' | null;
 }
 
 const ASSISTANT_WELCOME_MESSAGE =
-  'Contame qué querés agregar, aclarar o cambiar en el contrato (por ejemplo: una regla especial, una política de cancelación, un límite de horario) y te voy guiando para armar la cláusula.';
+  '¡Hola! Puedo armarte el contrato completo de este evento desde cero (te pregunto el tono y si hay algo especial), o sumar una cláusula puntual al que ya está cargado. ¿Con cuál arrancamos?';
+
+const QUICK_START_PROMPTS = [
+  { label: '📝 Armar el contrato completo', message: 'Quiero que armes el contrato completo para este evento.' },
+  { label: '➕ Agregar una cláusula puntual', message: 'Quiero agregar una cláusula puntual al contrato actual.' },
+];
 
 export const ContractModal: React.FC<ContractModalProps> = ({
   isOpen,
@@ -77,8 +83,8 @@ export const ContractModal: React.FC<ContractModalProps> = ({
 
   if (!isOpen || !event) return null;
 
-  const handleSendChatMessage = async () => {
-    const text = chatInput.trim();
+  const handleSendChatMessage = async (overrideText?: string) => {
+    const text = (overrideText ?? chatInput).trim();
     if (!text || isChatLoading) return;
 
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: 'user', text };
@@ -108,7 +114,13 @@ export const ContractModal: React.FC<ContractModalProps> = ({
 
       setChatMessages((prev) => [
         ...prev,
-        { id: `a-${Date.now()}`, role: 'assistant', text: data.reply, clause: data.clause || null },
+        {
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          text: data.reply,
+          proposedText: data.proposedText || null,
+          scope: data.scope || null,
+        },
       ]);
     } catch (err: any) {
       setChatError(err.message || 'No se pudo contactar al asistente de IA.');
@@ -117,8 +129,12 @@ export const ContractModal: React.FC<ContractModalProps> = ({
     }
   };
 
-  const handleInsertClause = (clause: string) => {
-    setContractText((prev) => `${prev.trim()}\n\n${clause.trim()}`);
+  const handleApplyProposedText = (text: string, scope?: 'full_contract' | 'clause' | null) => {
+    if (scope === 'full_contract') {
+      setContractText(text.trim());
+    } else {
+      setContractText((prev) => `${prev.trim()}\n\n${text.trim()}`);
+    }
     setMode('edit');
   };
 
@@ -219,7 +235,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({
             {mode === 'assistant' ? (
               <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-pink-600" />
-                <span>Asistente IA: contale qué cláusula querés armar y te va guiando</span>
+                <span>Asistente IA: iniciá el contrato completo o sumá cláusulas, y te va guiando</span>
               </span>
             ) : (
               <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -293,27 +309,60 @@ export const ContractModal: React.FC<ContractModalProps> = ({
                       >
                         {msg.text}
                       </div>
-                      {msg.clause && (
-                        <div className="w-full p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                          <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">
-                            Cláusula propuesta
+                      {msg.proposedText && (
+                        <div
+                          className={`w-full p-3 rounded-xl border ${
+                            msg.scope === 'full_contract'
+                              ? 'bg-indigo-50 border-indigo-200'
+                              : 'bg-emerald-50 border-emerald-200'
+                          }`}
+                        >
+                          <p
+                            className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                              msg.scope === 'full_contract' ? 'text-indigo-800' : 'text-emerald-800'
+                            }`}
+                          >
+                            {msg.scope === 'full_contract' ? 'Contrato completo propuesto' : 'Cláusula propuesta'}
                           </p>
-                          <p className="text-xs text-emerald-950 whitespace-pre-wrap leading-relaxed mb-2">
-                            {msg.clause}
+                          <p
+                            className={`text-xs whitespace-pre-wrap leading-relaxed mb-2 max-h-40 overflow-y-auto ${
+                              msg.scope === 'full_contract' ? 'text-indigo-950' : 'text-emerald-950'
+                            }`}
+                          >
+                            {msg.proposedText}
                           </p>
                           <button
                             type="button"
-                            onClick={() => handleInsertClause(msg.clause as string)}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                            onClick={() => handleApplyProposedText(msg.proposedText as string, msg.scope)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                              msg.scope === 'full_contract'
+                                ? 'bg-indigo-600 hover:bg-indigo-700'
+                                : 'bg-emerald-600 hover:bg-emerald-700'
+                            }`}
                           >
                             <PlusCircle className="w-3.5 h-3.5" />
-                            <span>Insertar en el contrato</span>
+                            <span>{msg.scope === 'full_contract' ? 'Usar como contrato completo' : 'Insertar en el contrato'}</span>
                           </button>
                         </div>
                       )}
                     </div>
                   </div>
                 ))}
+
+                {chatMessages.length === 1 && !isChatLoading && (
+                  <div className="flex flex-wrap gap-2 pl-9">
+                    {QUICK_START_PROMPTS.map((qp) => (
+                      <button
+                        key={qp.label}
+                        type="button"
+                        onClick={() => handleSendChatMessage(qp.message)}
+                        className="px-2.5 py-1.5 rounded-lg bg-pink-50 hover:bg-pink-100 border border-pink-200 text-[11px] font-semibold text-pink-700 transition-colors cursor-pointer"
+                      >
+                        {qp.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {isChatLoading && (
                   <div className="flex items-center gap-2 text-slate-500">
@@ -322,7 +371,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({
                     </div>
                     <div className="px-3 py-2 rounded-2xl rounded-tl-sm bg-slate-100 text-xs flex items-center gap-1.5">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Pensando la cláusula...</span>
+                      <span>Pensando...</span>
                     </div>
                   </div>
                 )}
@@ -345,12 +394,12 @@ export const ContractModal: React.FC<ContractModalProps> = ({
                       handleSendChatMessage();
                     }
                   }}
-                  placeholder="Ej: quiero que se aclare que no se permiten mascotas..."
+                  placeholder="Ej: armame el contrato completo, o quiero que se aclare que no se permiten mascotas..."
                   className="flex-1 px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 focus:outline-hidden"
                 />
                 <button
                   type="button"
-                  onClick={handleSendChatMessage}
+                  onClick={() => handleSendChatMessage()}
                   disabled={!chatInput.trim() || isChatLoading}
                   className="p-2.5 bg-pink-600 hover:bg-pink-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-colors cursor-pointer shrink-0"
                 >
