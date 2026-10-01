@@ -266,6 +266,20 @@ export async function saveEventToDb(event: EventItem, userId?: string): Promise<
         },
       });
 
+    await recordBotonObservation({
+      userId,
+      action: existingIdx >= 0 ? 'event_updated' : 'event_created',
+      entityType: 'event',
+      entityId: sanitizedEvent.id,
+      context: {
+        eventType: sanitizedEvent.eventType,
+        eventDate: sanitizedEvent.eventDate,
+        status: sanitizedEvent.status,
+        hasBalance: sanitizedEvent.depositAmount < sanitizedEvent.totalAmount,
+      },
+      outcome: 'completed',
+    });
+
     // Sync payment history
     if (sanitizedEvent.paymentHistory && sanitizedEvent.paymentHistory.length > 0) {
       for (const p of sanitizedEvent.paymentHistory) {
@@ -312,6 +326,17 @@ export async function addPaymentToDb(eventId: string, payment: PaymentRecord): P
       receiptNumber: payment.receiptNumber || null,
     }).onConflictDoNothing();
 
+    await recordBotonObservation({
+      action: 'payment_registered',
+      entityType: 'event',
+      entityId: eventId,
+      context: {
+        concept: payment.concept,
+        method: payment.method,
+      },
+      outcome: 'completed',
+    });
+
     const allEvPayments = await db.select().from(payments).where(eq(payments.eventId, eventId));
     const totalPaid = allEvPayments.reduce((sum, p) => sum + p.amount, 0);
 
@@ -335,6 +360,12 @@ export async function deleteEventFromDb(id: string): Promise<void> {
   memoryEvents = memoryEvents.filter((e) => e.id !== id);
   try {
     await db.delete(events).where(eq(events.id, id));
+    await recordBotonObservation({
+      action: 'event_deleted',
+      entityType: 'event',
+      entityId: id,
+      outcome: 'completed',
+    });
   } catch (error) {
     console.warn('deleteEventFromDb notice:', error);
   }
@@ -413,6 +444,18 @@ export async function saveReminderToDb(reminder: ReminderItem, userId?: string):
           notes: reminder.notes || null,
         },
       });
+    await recordBotonObservation({
+      userId,
+      action: existingIdx >= 0 ? 'reminder_updated' : 'reminder_created',
+      entityType: 'reminder',
+      entityId: reminder.id,
+      context: {
+        category: reminder.category,
+        priority: reminder.priority,
+        completed: reminder.completed,
+      },
+      outcome: 'completed',
+    });
   } catch (error) {
     console.warn('saveReminderToDb notice (cached in memory):', error);
   }
@@ -504,6 +547,18 @@ export async function saveExpenseToDb(expense: ExpenseItem, userId?: string): Pr
           notes: expense.notes || null,
         },
       });
+    await recordBotonObservation({
+      userId,
+      action: existingIdx >= 0 ? 'expense_updated' : 'expense_created',
+      entityType: 'expense',
+      entityId: expense.id,
+      context: {
+        category: expense.category,
+        paymentMethod: expense.paymentMethod || 'Efectivo',
+        linkedToEvent: Boolean(expense.eventId),
+      },
+      outcome: 'completed',
+    });
   } catch (error) {
     console.warn('saveExpenseToDb notice (cached in memory):', error);
   }
