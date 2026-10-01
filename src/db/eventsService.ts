@@ -1,6 +1,6 @@
 import { eq, desc } from 'drizzle-orm';
 import { db, createPool } from './index.ts';
-import { events, payments, reminders, users, expenses } from './schema.ts';
+import { events, payments, reminders, users, expenses, botonObservations } from './schema.ts';
 import { EventItem, PaymentRecord, ReminderItem, ExpenseItem } from '../types.ts';
 import { INITIAL_EVENTS, INITIAL_REMINDERS, INITIAL_EXPENSES } from '../utils/storage.ts';
 
@@ -86,6 +86,41 @@ export async function ensureTablesExist(): Promise<void> {
           supplier TEXT,
           receipt_number TEXT,
           notes TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS boton_observations (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT,
+          source TEXT NOT NULL DEFAULT 'candy',
+          action TEXT NOT NULL,
+          entity_type TEXT,
+          entity_id TEXT,
+          context TEXT,
+          outcome TEXT NOT NULL DEFAULT 'observed',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS boton_discoveries (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT,
+          kind TEXT NOT NULL,
+          signature TEXT NOT NULL,
+          description TEXT NOT NULL,
+          confidence INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'candidate',
+          evidence TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS boton_executions (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT,
+          discovery_id INTEGER,
+          action TEXT NOT NULL,
+          risk TEXT NOT NULL DEFAULT 'low',
+          decision TEXT NOT NULL,
+          result TEXT,
+          verified BOOLEAN NOT NULL DEFAULT false,
+          feedback TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         UPDATE events SET location = 'Candy Salón de Eventos' WHERE location ILIKE '%candy%';
@@ -525,5 +560,36 @@ export async function seedInitialDataIfEmpty(): Promise<void> {
     }
   } catch (error) {
     console.warn('Initial seeding notice (using in-memory data):', error);
+  }
+}
+
+
+type BotonObservationInput = {
+  userId?: string;
+  action: string;
+  entityType?: string;
+  entityId?: string;
+  context?: Record<string, unknown>;
+  outcome?: string;
+};
+
+// BOTON observes completed domain operations. This is deliberately generic:
+// Candy reports facts; it does not tell BOTON which automation to discover.
+export async function recordBotonObservation(input: BotonObservationInput): Promise<void> {
+  if (dbDisabled) return;
+  try {
+    await ensureTablesExist();
+    if (dbDisabled) return;
+    await db.insert(botonObservations).values({
+      userId: input.userId || null,
+      source: 'candy',
+      action: input.action,
+      entityType: input.entityType || null,
+      entityId: input.entityId || null,
+      context: input.context ? JSON.stringify(input.context) : null,
+      outcome: input.outcome || 'observed',
+    });
+  } catch (error) {
+    console.warn('BOTON observation notice:', error);
   }
 }
