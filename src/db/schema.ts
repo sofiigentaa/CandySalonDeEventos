@@ -92,3 +92,46 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
     references: [events.id],
   }),
 }));
+
+
+// BOTON memory: authorized observations from the host system.
+// This stores what happened, not a pre-programmed automation rule.
+export const botonObservations = pgTable('boton_observations', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id'),
+  source: text('source').notNull().default('candy'),
+  action: text('action').notNull(),
+  entityType: text('entity_type'),
+  entityId: text('entity_id'),
+  context: text('context'), // JSON serialized context; avoids coupling BOTON to Candy UI
+  outcome: text('outcome').notNull().default('observed'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+// BOTON keeps the hypotheses it discovers separate from Candy business data.
+export const botonDiscoveries = pgTable('boton_discoveries', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id'),
+  kind: text('kind').notNull(), // pattern | need | microsystem
+  signature: text('signature').notNull(),
+  description: text('description').notNull(),
+  confidence: integer('confidence').notNull().default(0), // 0..100
+  status: text('status').notNull().default('candidate'),
+  evidence: text('evidence'), // JSON serialized evidence
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Execution history lets BOTON verify results and learn from success/failure.
+export const botonExecutions = pgTable('boton_executions', {
+  id: serial('id').primaryKey(),
+  userId: text('user_id'),
+  discoveryId: integer('discovery_id'),
+  action: text('action').notNull(),
+  risk: text('risk').notNull().default('low'),
+  decision: text('decision').notNull(),
+  result: text('result'),
+  verified: boolean('verified').notNull().default(false),
+  feedback: text('feedback'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
