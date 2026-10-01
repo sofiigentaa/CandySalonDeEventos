@@ -43,8 +43,20 @@ const SPANISH_MONTHS_SHORT = [
 /**
  * Parses YYYY-MM-DD to a local Date object without timezone offset issues
  */
-export function parseLocalDate(dateString: string): Date {
-  if (!dateString) return new Date();
+export function parseLocalDate(dateValue: string | Date): Date {
+  if (!dateValue) return new Date();
+
+  // PostgreSQL/Drizzle can return DATE/TIMESTAMP values as Date objects.
+  // Keep the UI compatible with both persisted DB values and YYYY-MM-DD strings.
+  if (dateValue instanceof Date) {
+    return new Date(
+      dateValue.getFullYear(),
+      dateValue.getMonth(),
+      dateValue.getDate(),
+    );
+  }
+
+  const dateString = String(dateValue);
   const parts = dateString.split('-');
   if (parts.length === 3) {
     const year = parseInt(parts[0], 10);
