@@ -15,7 +15,6 @@ import {
   saveRemindersToStorage,
   loadExpensesFromStorage,
   saveExpensesToStorage,
-  resetToDemoData,
 } from './utils/storage.ts';
 import {
   fetchEvents,
@@ -30,6 +29,7 @@ import {
   deleteExpenseApi,
   resetDemoApi,
   clearAllDataApi,
+  setApiHandlers,
 } from './utils/api.ts';
 import {
   getRemainingBalance,
@@ -62,7 +62,27 @@ import { BackupPayload } from './utils/backupUtils.ts';
 import { CalendarPlus, Plus, FilterX } from 'lucide-react';
 
 export default function App() {
-  const { user } = useAuth();
+  const { logOut } = useAuth();
+
+  // Avisos de error del servidor (antes los guardados fallaban en silencio)
+  const [apiError, setApiError] = useState<string | null>(null);
+  useEffect(() => {
+    setApiHandlers({ onError: (message) => setApiError(message) });
+  }, []);
+  useEffect(() => {
+    if (!apiError) return;
+    const t = setTimeout(() => setApiError(null), 7000);
+    return () => clearTimeout(t);
+  }, [apiError]);
+
+  // "Vaciar todo" y "Datos de ejemplo" solo si el servidor los habilita
+  const [demoTools, setDemoTools] = useState(false);
+  useEffect(() => {
+    fetch('/api/health')
+      .then((r) => r.json())
+      .then((h) => setDemoTools(Boolean(h?.demoTools)))
+      .catch(() => setDemoTools(false));
+  }, []);
 
   // Persistence state
   const [events, setEvents] = useState<EventItem[]>(() => loadEventsFromStorage());
@@ -207,7 +227,7 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
     setReminders((prev) => [newReminder, ...prev]);
-    saveReminderApi(newReminder);
+    saveReminderApi(newReminder).then((ok) => { if (!ok) loadData(); });
   };
 
   const handleToggleCompleteReminder = (id: string) => {
@@ -225,7 +245,7 @@ export default function App() {
 
   const handleUpdateReminder = (updatedReminder: ReminderItem) => {
     setReminders((prev) => prev.map((r) => (r.id === updatedReminder.id ? updatedReminder : r)));
-    saveReminderApi(updatedReminder);
+    saveReminderApi(updatedReminder).then((ok) => { if (!ok) loadData(); });
   };
 
   const handleDeleteReminder = (id: string) => {
@@ -237,7 +257,7 @@ export default function App() {
       variant: 'danger',
       onConfirm: () => {
         setReminders((prev) => prev.filter((r) => r.id !== id));
-        deleteReminderApi(id);
+        deleteReminderApi(id).then((ok) => { if (!ok) loadData(); });
       },
     });
   };
@@ -256,7 +276,7 @@ export default function App() {
       }
       return [savedExpense, ...prev];
     });
-    saveExpenseApi(savedExpense);
+    saveExpenseApi(savedExpense).then((ok) => { if (!ok) loadData(); });
   };
 
   const handleDeleteExpense = (id: string) => {
@@ -268,7 +288,7 @@ export default function App() {
       variant: 'danger',
       onConfirm: () => {
         setExpenses((prev) => prev.filter((e) => e.id !== id));
-        deleteExpenseApi(id);
+        deleteExpenseApi(id).then((ok) => { if (!ok) loadData(); });
         if (editingExpense?.id === id) {
           setEditingExpense(null);
           setIsExpenseModalOpen(false);
@@ -300,7 +320,14 @@ export default function App() {
       return [savedEvent, ...prev];
     });
 
-    saveEventApi(savedEvent);
+    saveEventApi(savedEvent).then((stored) => {
+      if (stored) {
+        setEvents((prev) => prev.map((e) => (e.id === stored.id ? stored : e)));
+      } else {
+        // No se guardó: se vuelve a lo que tiene el servidor
+        loadData();
+      }
+    });
 
     if (autoReminders && autoReminders.length > 0) {
       autoReminders.forEach((r) => {
@@ -320,7 +347,7 @@ export default function App() {
       onConfirm: () => {
         setEvents((prev) => prev.filter((e) => e.id !== id));
         setReminders((prev) => prev.filter((r) => r.eventId !== id));
-        deleteEventApi(id);
+        deleteEventApi(id).then((ok) => { if (!ok) loadData(); });
         if (selectedEventForReceipt?.id === id) setIsReceiptModalOpen(false);
         if (selectedEventForPayment?.id === id) setIsPaymentModalOpen(false);
         if (editingEvent?.id === id) {
@@ -355,7 +382,14 @@ export default function App() {
       })
     );
 
-    addPaymentApi(eventId, payment);
+    addPaymentApi(eventId, payment).then((stored) => {
+      if (stored) {
+        setEvents((prev) => prev.map((e) => (e.id === stored.id ? stored : e)));
+        setSelectedEventForReceipt((current) => (current?.id === stored.id ? stored : current));
+      } else {
+        loadData();
+      }
+    });
   };
 
   // Handle Deleting a payment record from receipt view
@@ -380,7 +414,9 @@ export default function App() {
               updatedAt: new Date().toISOString(),
             };
 
-            saveEventApi(updated);
+            saveEventApi(updated).then((stored) => {
+              if (!stored) loadData();
+            });
 
             if (selectedEventForReceipt?.id === eventId) {
               setSelectedEventForReceipt(updated);
@@ -402,10 +438,12 @@ export default function App() {
       variant: 'danger',
       onConfirm: async () => {
         setIsRefreshing(true);
-        await clearAllDataApi();
-        setEvents([]);
-        setReminders([]);
-        setExpenses([]);
+        const ok = await clearAllDataApi();
+        if (ok) {
+          setEvents([]);
+          setReminders([]);
+          setExpenses([]);
+        }
         setIsRefreshing(false);
       },
     });
@@ -427,11 +465,6 @@ export default function App() {
           if (serverResult.expenses) {
             setExpenses(serverResult.expenses);
           }
-        } else {
-          const demo = resetToDemoData();
-          setEvents(demo.events);
-          setReminders(demo.reminders);
-          setExpenses(demo.expenses);
         }
         setIsRefreshing(false);
       },
@@ -602,8 +635,9 @@ export default function App() {
         onOpenNewExpense={handleOpenNewExpense}
         onSyncSupabase={loadData}
         isRefreshing={isRefreshing}
-        onClearAllData={handleClearAllData}
-        onResetDemoData={handleResetData}
+        onClearAllData={demoTools ? handleClearAllData : undefined}
+        onResetDemoData={demoTools ? handleResetData : undefined}
+        onLogout={logOut}
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
         onOpenQuoteCalculator={handleOpenQuoteCalculator}
         viewMode={viewMode}
@@ -651,7 +685,7 @@ export default function App() {
               onSortOptionChange={setSortOption}
               totalCount={events.length}
               filteredCount={filteredEvents.length}
-              onOpenNewEvent={handleOpenNewEvent}
+              onOpenNewEvent={() => handleOpenNewEvent()}
               isCalendarView={viewMode === 'calendar'}
             />
 
@@ -736,6 +770,7 @@ export default function App() {
         initialEvent={editingEvent}
         defaultDate={defaultDateForNewEvent}
         currency={currency}
+        existingEvents={events}
       />
 
       <PaymentModal
@@ -824,6 +859,18 @@ export default function App() {
         cancelText={confirmDialog.cancelText}
         variant={confirmDialog.variant}
       />
+
+      {apiError && (
+        <div
+          role="alert"
+          className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[80] max-w-md w-[calc(100%-2rem)] bg-rose-600 text-white text-sm font-semibold px-4 py-3 rounded-xl shadow-lg flex items-start gap-3"
+        >
+          <span className="flex-1">{apiError}</span>
+          <button type="button" onClick={() => setApiError(null)} className="opacity-80 hover:opacity-100 cursor-pointer" aria-label="Cerrar aviso">
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Subtle Footer (Desktop) */}
       <footer className="hidden md:block bg-white border-t border-slate-200/80 py-4 text-center text-xs text-slate-400">

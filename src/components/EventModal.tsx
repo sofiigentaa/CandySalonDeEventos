@@ -6,6 +6,7 @@ import {
   formatShortDateSpanish,
   getDaysRemaining,
   formatCurrency,
+  getTotalPaid,
   getTodayString,
 } from '../utils/dateUtils';
 import {
@@ -57,6 +58,7 @@ interface EventModalProps {
   initialEvent?: EventItem | null;
   defaultDate?: string;
   currency: string;
+  existingEvents?: EventItem[];
 }
 
 const EVENT_TYPES: EventType[] = [
@@ -93,6 +95,7 @@ export const EventModal: React.FC<EventModalProps> = ({
   initialEvent,
   defaultDate,
   currency,
+  existingEvents = [],
 }) => {
   const [title, setTitle] = useState('');
   const [clientName, setClientName] = useState('');
@@ -532,6 +535,33 @@ export const EventModal: React.FC<EventModalProps> = ({
       return;
     }
 
+    if (!Number.isInteger(numTotal) || !Number.isInteger(numDeposit)) {
+      alert('Ingresá los montos sin centavos.');
+      return;
+    }
+
+    if (numDeposit > numTotal) {
+      alert(`La seña (${formatCurrency(numDeposit, currency)}) no puede ser mayor que el total del evento (${formatCurrency(numTotal, currency)}).`);
+      return;
+    }
+
+    // El salón no puede tener dos eventos el mismo día a la misma hora.
+    const currentId = initialEvent?.id;
+    const sameDay = existingEvents.filter(
+      (ev) => ev.id !== currentId && ev.status !== 'cancelled' && ev.eventDate === eventDate
+    );
+    const sameSlot = sameDay.find((ev) => eventTime.trim() && ev.eventTime === eventTime.trim());
+    if (sameSlot) {
+      alert(`Ese día y horario ya está reservado: "${sameSlot.title}" (${sameSlot.clientName}). Elegí otra fecha u hora.`);
+      return;
+    }
+    if (sameDay.length > 0) {
+      const lista = sameDay.map((ev) => `• ${ev.title} — ${ev.eventTime || 'sin hora'}`).join('\n');
+      if (!window.confirm(`Ese día ya hay ${sameDay.length === 1 ? 'un evento' : 'eventos'} en el salón:\n${lista}\n\n¿Querés reservar igual en otro horario?`)) {
+        return;
+      }
+    }
+
     const now = new Date().toISOString();
 
     // Setup initial payment history
@@ -620,6 +650,11 @@ export const EventModal: React.FC<EventModalProps> = ({
       createdAt: initialEvent ? initialEvent.createdAt : now,
       updatedAt: now,
     };
+
+    if (getTotalPaid(eventToSave) > numTotal) {
+      alert(`Lo ya cobrado (${formatCurrency(getTotalPaid(eventToSave), currency)}) supera el nuevo total. Revisá el total o los pagos del evento.`);
+      return;
+    }
 
     // Build reminders from active configs
     const autoReminders: Array<Omit<ReminderItem, 'id' | 'createdAt'>> = [];

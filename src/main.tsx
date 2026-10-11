@@ -1,7 +1,8 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
-import { AuthProvider } from './contexts/AuthContext.tsx';
+import { AuthProvider, useAuth } from './contexts/AuthContext.tsx';
+import { LoginScreen } from './components/LoginScreen.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 
@@ -21,11 +22,20 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Sin sesión iniciada no se muestra nada del salón.
+function AuthGate() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-sm text-slate-400">Cargando…</div>;
+  }
+  return user ? <App /> : <LoginScreen />;
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <AuthProvider>
-        <App />
+        <AuthGate />
       </AuthProvider>
     </ErrorBoundary>
   </StrictMode>,

@@ -1,9 +1,8 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
-import { optionalAuth, requireAuth, AuthRequest } from './src/middleware/auth.ts';
 import {
   getAllEventsFromDb,
+  getEventById,
   saveEventToDb,
   deleteEventFromDb,
   addPaymentToDb,
@@ -15,268 +14,228 @@ import {
   deleteExpenseFromDb,
   seedInitialDataIfEmpty,
   clearAllFromDb,
-  getOrCreateUser,
+  loadDemoData,
   ensureTablesExist,
+  isMemoryMode,
 } from './src/db/eventsService.ts';
 import { generateContractWithGemini, chatWithContractAssistant } from './src/utils/aiContractService.ts';
+import { assertProductionSecrets, isProduction, registerAuthRoutes, requireSession } from './src/server/session.ts';
+import {
+  ValidationError,
+  findBookingConflict,
+  validateEvent,
+  validateExpense,
+  validatePayment,
+  validatePaymentForEvent,
+  validateReminder,
+} from './src/server/validation.ts';
+
+// Respuesta de error: el detalle técnico queda en el log del servidor, nunca
+// llega al navegador en producción.
+function sendError(res: express.Response, error: unknown, fallback: string) {
+  if (error instanceof ValidationError) {
+    return res.status(400).json({ error: error.message });
+  }
+  console.error(fallback, error);
+  const detail = !isProduction() && error instanceof Error ? ` (${error.message})` : '';
+  return res.status(500).json({ error: `${fallback}${detail}` });
+}
+
+// "Vaciar todo" y "Restablecer demo" solo existen si se habilitan a propósito
+// (por ejemplo en la demo pública). En el sistema de un cliente quedan apagados.
+const demoToolsEnabled = () => !isProduction() || process.env.ALLOW_DEMO_RESET === 'true';
 
 async function startServer() {
+  assertProductionSecrets();
+
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json());
+  app.disable('x-powered-by');
+  app.use(express.json({ limit: '1mb' }));
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'same-origin');
+    if (isProduction()) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
 
-  // Ensure DB tables exist and seed initial data
-  try {
-    await ensureTablesExist();
-    await seedInitialDataIfEmpty();
-  } catch (dbErr) {
-    console.warn('Initial DB setup / seeding note:', dbErr);
-  }
+  // Tablas y (si se pidió) datos de ejemplo. Si la base no responde, el
+  // servidor no arranca: es mejor que Render muestre el error a que la app
+  // "funcione" sin guardar nada.
+  await ensureTablesExist();
+  await seedInitialDataIfEmpty();
+  console.log(isMemoryMode() ? 'Modo demo: datos en memoria (sin base de datos).' : 'Base de datos PostgreSQL conectada.');
 
-  // Health check
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', time: new Date().toISOString() });
+    res.json({ status: 'ok', time: new Date().toISOString(), database: isMemoryMode() ? 'memory' : 'postgres', demoTools: demoToolsEnabled() });
   });
 
-  // User sync
-  app.post('/api/users/sync', requireAuth, async (req: AuthRequest, res) => {
+  registerAuthRoutes(app);
+
+  // Todo lo que sigue exige sesión iniciada.
+  app.use('/api', requireSession);
+
+  app.get('/api/events', async (_req, res) => {
     try {
-      if (!req.user || !req.user.uid) {
-        return res.status(401).json({ error: 'Unauthorized' });
+      res.json(await getAllEventsFromDb());
+    } catch (error) {
+      sendError(res, error, 'No se pudieron leer los eventos.');
+    }
+  });
+
+  app.post('/api/events', async (req: any, res) => {
+    try {
+      const event = validateEvent(req.body);
+      const all = await getAllEventsFromDb();
+      const conflict = findBookingConflict(all, event);
+      if (conflict) {
+        return res.status(409).json({
+          error: `Ese día y horario ya está reservado: "${conflict.title}" (${conflict.clientName}).`,
+          conflictId: conflict.id,
+        });
       }
-      const user = await getOrCreateUser(
-        req.user.uid,
-        req.user.email || 'user@candysalon.com',
-        req.user.name
-      );
-      res.json({ success: true, user });
-    } catch (error: any) {
-      console.error('User sync error:', error);
-      res.status(500).json({ error: error.message || 'Error syncing user' });
+      const saved = await saveEventToDb(event, req.user?.uid);
+      res.json({ success: true, event: saved });
+    } catch (error) {
+      sendError(res, error, 'No se pudo guardar el evento.');
     }
   });
 
-  // GET all events
-  app.get('/api/events', optionalAuth, async (_req: AuthRequest, res) => {
+  app.delete('/api/events/:id', async (req, res) => {
     try {
-      const eventsList = await getAllEventsFromDb();
-      res.json(eventsList);
-    } catch (error: any) {
-      console.error('Error fetching events:', error);
-      res.status(500).json({ error: error.message || 'Error fetching events' });
+      await deleteEventFromDb(req.params.id);
+      res.json({ success: true, deletedId: req.params.id });
+    } catch (error) {
+      sendError(res, error, 'No se pudo borrar el evento.');
     }
   });
 
-  // SAVE or update event
-  app.post('/api/events', optionalAuth, async (req: AuthRequest, res) => {
+  app.post('/api/events/:id/payments', async (req, res) => {
     try {
-      const eventData = req.body;
-      if (!eventData || !eventData.id || !eventData.title) {
-        return res.status(400).json({ error: 'Missing required event fields' });
-      }
-      await saveEventToDb(eventData, req.user?.uid);
-      res.json({ success: true, event: eventData });
-    } catch (error: any) {
-      console.error('Error saving event:', error);
-      res.status(500).json({ error: error.message || 'Error saving event' });
+      const payment = validatePayment(req.body);
+      const ev = await getEventById(req.params.id);
+      if (!ev) return res.status(404).json({ error: 'El evento no existe.' });
+      validatePaymentForEvent(ev, payment);
+      const saved = await addPaymentToDb(req.params.id, payment);
+      res.json({ success: true, event: saved, payment: saved?.paymentHistory?.find((p) => p.id === payment.id) });
+    } catch (error) {
+      sendError(res, error, 'No se pudo registrar el pago.');
     }
   });
 
-  // DELETE event
-  app.delete('/api/events/:id', optionalAuth, async (req: AuthRequest, res) => {
+  app.get('/api/reminders', async (_req, res) => {
     try {
-      const { id } = req.params;
-      await deleteEventFromDb(id);
-      res.json({ success: true, deletedId: id });
-    } catch (error: any) {
-      console.error('Error deleting event:', error);
-      res.status(500).json({ error: error.message || 'Error deleting event' });
+      res.json(await getAllRemindersFromDb());
+    } catch (error) {
+      sendError(res, error, 'No se pudieron leer los recordatorios.');
     }
   });
 
-  // ADD payment
-  app.post('/api/events/:id/payments', optionalAuth, async (req: AuthRequest, res) => {
+  app.post('/api/reminders', async (req: any, res) => {
     try {
-      const { id } = req.params;
-      const payment = req.body;
-      if (!payment || !payment.id || !payment.amount) {
-        return res.status(400).json({ error: 'Invalid payment payload' });
-      }
-      await addPaymentToDb(id, payment);
-      res.json({ success: true, payment });
-    } catch (error: any) {
-      console.error('Error adding payment:', error);
-      res.status(500).json({ error: error.message || 'Error adding payment' });
+      const reminder = validateReminder(req.body);
+      await saveReminderToDb(reminder, req.user?.uid);
+      res.json({ success: true, reminder });
+    } catch (error) {
+      sendError(res, error, 'No se pudo guardar el recordatorio.');
     }
   });
 
-  // GET all reminders
-  app.get('/api/reminders', optionalAuth, async (_req: AuthRequest, res) => {
+  app.delete('/api/reminders/:id', async (req, res) => {
     try {
-      const list = await getAllRemindersFromDb();
-      res.json(list);
-    } catch (error: any) {
-      console.error('Error fetching reminders:', error);
-      res.status(500).json({ error: error.message || 'Error fetching reminders' });
+      await deleteReminderFromDb(req.params.id);
+      res.json({ success: true, deletedId: req.params.id });
+    } catch (error) {
+      sendError(res, error, 'No se pudo borrar el recordatorio.');
     }
   });
 
-  // SAVE reminder
-  app.post('/api/reminders', optionalAuth, async (req: AuthRequest, res) => {
+  app.get('/api/expenses', async (_req, res) => {
     try {
-      const reminderData = req.body;
-      if (!reminderData || !reminderData.id || !reminderData.title) {
-        return res.status(400).json({ error: 'Missing required reminder fields' });
-      }
-      await saveReminderToDb(reminderData, req.user?.uid);
-      res.json({ success: true, reminder: reminderData });
-    } catch (error: any) {
-      console.error('Error saving reminder:', error);
-      res.status(500).json({ error: error.message || 'Error saving reminder' });
+      res.json(await getAllExpensesFromDb());
+    } catch (error) {
+      sendError(res, error, 'No se pudieron leer los egresos.');
     }
   });
 
-  // DELETE reminder
-  app.delete('/api/reminders/:id', optionalAuth, async (req: AuthRequest, res) => {
+  app.post('/api/expenses', async (req: any, res) => {
     try {
-      const { id } = req.params;
-      await deleteReminderFromDb(id);
-      res.json({ success: true, deletedId: id });
-    } catch (error: any) {
-      console.error('Error deleting reminder:', error);
-      res.status(500).json({ error: error.message || 'Error deleting reminder' });
+      const expense = validateExpense(req.body);
+      await saveExpenseToDb(expense, req.user?.uid);
+      res.json({ success: true, expense });
+    } catch (error) {
+      sendError(res, error, 'No se pudo guardar el egreso.');
     }
   });
 
-  // GET all expenses
-  app.get('/api/expenses', optionalAuth, async (_req: AuthRequest, res) => {
+  app.delete('/api/expenses/:id', async (req, res) => {
     try {
-      const list = await getAllExpensesFromDb();
-      res.json(list);
-    } catch (error: any) {
-      console.error('Error fetching expenses:', error);
-      res.status(500).json({ error: error.message || 'Error fetching expenses' });
+      await deleteExpenseFromDb(req.params.id);
+      res.json({ success: true, deletedId: req.params.id });
+    } catch (error) {
+      sendError(res, error, 'No se pudo borrar el egreso.');
     }
   });
 
-  // SAVE expense
-  app.post('/api/expenses', optionalAuth, async (req: AuthRequest, res) => {
+  // IA para contratos (Gemini). Requiere sesión: así nadie de afuera gasta la clave.
+  app.post('/api/ai/generate-contract', async (req, res) => {
     try {
-      const expenseData = req.body;
-      if (!expenseData || !expenseData.id || !expenseData.amount) {
-        return res.status(400).json({ error: 'Missing required expense fields' });
-      }
-      await saveExpenseToDb(expenseData, req.user?.uid);
-      res.json({ success: true, expense: expenseData });
-    } catch (error: any) {
-      console.error('Error saving expense:', error);
-      res.status(500).json({ error: error.message || 'Error saving expense' });
+      const { event, focusTone, customInstructions, currency } = req.body || {};
+      if (!event) return res.status(400).json({ error: 'Faltan los datos del evento para redactar el contrato' });
+      const result = await generateContractWithGemini({ event, focusTone, customInstructions, currency: currency || '$' });
+      res.json({ success: true, contractText: result.contractText, source: result.source });
+    } catch (error) {
+      sendError(res, error, 'Error al generar el contrato con IA.');
     }
   });
 
-  // DELETE expense
-  app.delete('/api/expenses/:id', optionalAuth, async (req: AuthRequest, res) => {
+  app.post('/api/ai/contract-assistant-chat', async (req, res) => {
     try {
-      const { id } = req.params;
-      await deleteExpenseFromDb(id);
-      res.json({ success: true, deletedId: id });
-    } catch (error: any) {
-      console.error('Error deleting expense:', error);
-      res.status(500).json({ error: error.message || 'Error deleting expense' });
-    }
-  });
-
-  // AI CONTRACT GENERATION (Gemini 3.8 Flash)
-  app.post('/api/ai/generate-contract', optionalAuth, async (req: AuthRequest, res) => {
-    try {
-      const { event, focusTone, customInstructions, currency } = req.body;
-      if (!event) {
-        return res.status(400).json({ error: 'Faltan los datos del evento para redactar el contrato' });
-      }
-
-      const result = await generateContractWithGemini({
-        event,
-        focusTone,
-        customInstructions,
-        currency: currency || '$',
-      });
-
-      res.json({
-        success: true,
-        contractText: result.contractText,
-        source: result.source,
-      });
-    } catch (error: any) {
-      console.error('Error in contract AI endpoint:', error);
-      res.status(500).json({ error: error.message || 'Error al generar contrato con IA' });
-    }
-  });
-
-  // AI CONTRACT ASSISTANT (conversational, guides the owner to draft specific clauses)
-  app.post('/api/ai/contract-assistant-chat', optionalAuth, async (req: AuthRequest, res) => {
-    try {
-      const { event, currency, contractText, history, message } = req.body;
-      if (!event || !message) {
-        return res.status(400).json({ error: 'Faltan datos para el asistente de contrato' });
-      }
-
+      const { event, currency, contractText, history, message } = req.body || {};
+      if (!event || !message) return res.status(400).json({ error: 'Faltan datos para el asistente de contrato' });
       const result = await chatWithContractAssistant(
         event,
         currency || '$',
-        contractText || '',
-        Array.isArray(history) ? history : [],
-        message
+        String(contractText || '').slice(0, 20000),
+        Array.isArray(history) ? history.slice(-20) : [],
+        String(message).slice(0, 2000)
       );
-
       res.json({ success: true, ...result });
-    } catch (error: any) {
-      console.error('Error in contract assistant chat endpoint:', error);
-      res.status(500).json({ error: error.message || 'Error en el asistente de IA' });
+    } catch (error) {
+      sendError(res, error, 'Error en el asistente de IA.');
     }
   });
 
-  // CLEAR ALL DATA from database (Empty database for production/clean start)
-  app.post('/api/clear-all', optionalAuth, async (_req: AuthRequest, res) => {
+  app.post('/api/clear-all', async (_req, res) => {
+    if (!demoToolsEnabled()) return res.status(403).json({ error: 'Función deshabilitada en este sistema.' });
     try {
       await clearAllFromDb();
-      res.json({ success: true, message: 'All database records cleared', events: [], reminders: [], expenses: [] });
-    } catch (error: any) {
-      console.error('Error clearing database:', error);
-      res.status(500).json({ error: error.message || 'Error clearing database' });
+      res.json({ success: true, events: [], reminders: [], expenses: [] });
+    } catch (error) {
+      sendError(res, error, 'No se pudo vaciar la base.');
     }
   });
 
-  // RESET database to initial demo state
-  app.post('/api/reset-demo', optionalAuth, async (_req: AuthRequest, res) => {
+  app.post('/api/reset-demo', async (_req, res) => {
+    if (!demoToolsEnabled()) return res.status(403).json({ error: 'Función deshabilitada en este sistema.' });
     try {
-      await clearAllFromDb().catch(() => {});
-      const { INITIAL_EVENTS, INITIAL_REMINDERS, INITIAL_EXPENSES } = await import('./src/utils/storage.ts');
-      for (const ev of INITIAL_EVENTS) {
-        await saveEventToDb(ev);
-      }
-      for (const rem of INITIAL_REMINDERS) {
-        await saveReminderToDb(rem);
-      }
-      for (const exp of INITIAL_EXPENSES) {
-        await saveExpenseToDb(exp);
-      }
-      const allEv = await getAllEventsFromDb();
-      const allRem = await getAllRemindersFromDb();
-      const allExp = await getAllExpensesFromDb();
-      res.json({ success: true, events: allEv, reminders: allRem, expenses: allExp });
-    } catch (error: any) {
-      console.error('Error resetting demo data:', error);
-      res.status(500).json({ error: error.message || 'Error resetting demo' });
+      await loadDemoData();
+      res.json({
+        success: true,
+        events: await getAllEventsFromDb(),
+        reminders: await getAllRemindersFromDb(),
+        expenses: await getAllExpensesFromDb(),
+      });
+    } catch (error) {
+      sendError(res, error, 'No se pudieron restablecer los datos de ejemplo.');
     }
   });
 
-  // Vite middleware for development vs Production static serving
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
+  if (!isProduction()) {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
@@ -291,4 +250,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  console.error('El servidor no pudo arrancar:', error);
+  process.exit(1);
+});

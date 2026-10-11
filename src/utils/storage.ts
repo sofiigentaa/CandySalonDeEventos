@@ -3,15 +3,28 @@ import { EventItem, ReminderItem, ExpenseItem } from '../types';
 const STORAGE_KEY = 'gestor_eventos_candy_data_v2';
 const REMINDERS_STORAGE_KEY = 'gestor_eventos_candy_reminders_v1';
 
+// Las fechas de ejemplo se corren para que siempre queden cerca de hoy
+// (las originales eran de agosto-octubre 2026 y ya habían pasado).
+const DEMO_BASE = new Date(2026, 8, 1); // 1 de septiembre de 2026
+function demoDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const today = new Date();
+  const offsetDays = Math.round(
+    (new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() - DEMO_BASE.getTime()) / 86400000
+  );
+  const shifted = new Date(y, m - 1, d + offsetDays);
+  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}-${String(shifted.getDate()).padStart(2, '0')}`;
+}
+
 export const INITIAL_EVENTS: EventItem[] = [
   {
     id: 'evt-1',
-    title: 'Boda Sofía & Mateo',
+    title: 'Bautismo de Mateo',
     clientName: 'Sofía Genta',
     clientPhone: '+54 9 11 4589-2231',
     clientEmail: 'sofiigenta@gmail.com',
     eventType: 'Bautismo',
-    eventDate: '2026-09-12',
+    eventDate: demoDate('2026-09-12'),
     eventTime: '19:30',
     location: 'Candy Salón de Eventos',
     guestCount: 140,
@@ -20,7 +33,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     paymentHistory: [
       {
         id: 'pay-1',
-        date: '2026-07-10',
+        date: demoDate('2026-07-10'),
         amount: 350000,
         method: 'Transferencia',
         concept: 'Seña inicial',
@@ -29,7 +42,7 @@ export const INITIAL_EVENTS: EventItem[] = [
       },
       {
         id: 'pay-2',
-        date: '2026-08-15',
+        date: demoDate('2026-08-15'),
         amount: 200000,
         method: 'Transferencia',
         concept: 'Abono parcial',
@@ -49,7 +62,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     clientPhone: '+54 9 11 6321-7744',
     clientEmail: 'marcela.rod@gmail.com',
     eventType: 'Cumpleaños',
-    eventDate: '2026-08-29',
+    eventDate: demoDate('2026-08-29'),
     eventTime: '21:00',
     location: 'Candy Salón de Eventos',
     guestCount: 110,
@@ -58,7 +71,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     paymentHistory: [
       {
         id: 'pay-3',
-        date: '2026-06-01',
+        date: demoDate('2026-06-01'),
         amount: 200000,
         method: 'Mercado Pago',
         concept: 'Seña inicial',
@@ -78,7 +91,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     clientPhone: '+54 9 11 8899-4411',
     clientEmail: 'fbal@techlab.io',
     eventType: 'Comunión',
-    eventDate: '2026-09-04',
+    eventDate: demoDate('2026-09-04'),
     eventTime: '12:30',
     location: 'Candy Salón de Eventos',
     guestCount: 65,
@@ -87,7 +100,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     paymentHistory: [
       {
         id: 'pay-4',
-        date: '2026-08-01',
+        date: demoDate('2026-08-01'),
         amount: 240000,
         method: 'Transferencia',
         concept: 'Seña inicial',
@@ -96,7 +109,7 @@ export const INITIAL_EVENTS: EventItem[] = [
       },
       {
         id: 'pay-5',
-        date: '2026-08-20',
+        date: demoDate('2026-08-20'),
         amount: 240000,
         method: 'Transferencia',
         concept: 'Pago final',
@@ -116,7 +129,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     clientPhone: '+54 9 11 3344-9912',
     clientEmail: 'silviarossi@outlook.com',
     eventType: 'Cumpleaños',
-    eventDate: '2026-09-26',
+    eventDate: demoDate('2026-09-26'),
     eventTime: '13:00',
     location: 'Candy Salón de Eventos',
     guestCount: 50,
@@ -125,7 +138,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     paymentHistory: [
       {
         id: 'pay-6',
-        date: '2026-08-10',
+        date: demoDate('2026-08-10'),
         amount: 120000,
         method: 'Efectivo',
         concept: 'Seña inicial',
@@ -145,7 +158,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     clientPhone: '+54 9 11 7766-3322',
     clientEmail: 'camimorales@gmail.com',
     eventType: 'Baby Shower',
-    eventDate: '2026-10-03',
+    eventDate: demoDate('2026-10-03'),
     eventTime: '16:00',
     location: 'Candy Salón de Eventos',
     guestCount: 35,
@@ -154,7 +167,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     paymentHistory: [
       {
         id: 'pay-7',
-        date: '2026-08-22',
+        date: demoDate('2026-08-22'),
         amount: 80000,
         method: 'Mercado Pago',
         concept: 'Seña inicial',
@@ -177,7 +190,7 @@ export const INITIAL_REMINDERS: ReminderItem[] = [
     clientName: 'Marcela Rodríguez',
     clientPhone: '+54 9 11 6321-7744',
     title: 'Cobrar saldo restante $420.000 (15 Años Martina)',
-    dueDate: '2026-08-25',
+    dueDate: demoDate('2026-08-25'),
     dueTime: '11:00',
     category: 'cobro_saldo',
     completed: false,
@@ -192,7 +205,7 @@ export const INITIAL_REMINDERS: ReminderItem[] = [
     clientName: 'Sofía Genta',
     clientPhone: '+54 9 11 4589-2231',
     title: 'Confirmar lista definitiva de invitados y menú especial',
-    dueDate: '2026-09-02',
+    dueDate: demoDate('2026-09-02'),
     dueTime: '17:00',
     category: 'confirmar_invitados',
     completed: false,
@@ -207,7 +220,7 @@ export const INITIAL_REMINDERS: ReminderItem[] = [
     clientName: 'Camila Morales',
     clientPhone: '+54 9 11 7766-3322',
     title: 'Preparar detalles de Candy Bar y decoración personalizada',
-    dueDate: '2026-09-28',
+    dueDate: demoDate('2026-09-28'),
     dueTime: '15:30',
     category: 'decoracion_candy',
     completed: false,
@@ -222,7 +235,7 @@ export const INITIAL_REMINDERS: ReminderItem[] = [
     clientName: 'Federico Bal',
     clientPhone: '+54 9 11 8899-4411',
     title: 'Coordinar prueba de sonido y proyector con el DJ',
-    dueDate: '2026-09-03',
+    dueDate: demoDate('2026-09-03'),
     dueTime: '10:00',
     category: 'proveedores_catering',
     completed: true,
@@ -237,7 +250,7 @@ const EXPENSES_STORAGE_KEY = 'gestor_eventos_candy_expenses_v1';
 export const INITIAL_EXPENSES: ExpenseItem[] = [
   {
     id: 'exp-1',
-    date: '2026-08-05',
+    date: demoDate('2026-08-05'),
     amount: 180000,
     category: 'alquiler',
     concept: 'Alquiler mensual Salón Principal y Quincho',
@@ -249,7 +262,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
   },
   {
     id: 'exp-2',
-    date: '2026-08-08',
+    date: demoDate('2026-08-08'),
     amount: 45000,
     category: 'gastos_fijos',
     concept: 'Servicio de Electricidad / Edenor',
@@ -261,7 +274,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
   },
   {
     id: 'exp-3',
-    date: '2026-08-10',
+    date: demoDate('2026-08-10'),
     amount: 95000,
     category: 'pago_personal',
     concept: 'Pago personal: 3 Mozos y 1 Encargado de Salón',
@@ -275,7 +288,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
   },
   {
     id: 'exp-4',
-    date: '2026-08-12',
+    date: demoDate('2026-08-12'),
     amount: 72000,
     category: 'comida',
     concept: 'Insumos gastronómicos y catering carnes premium',
@@ -289,7 +302,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
   },
   {
     id: 'exp-5',
-    date: '2026-08-14',
+    date: demoDate('2026-08-14'),
     amount: 58000,
     category: 'bebida',
     concept: 'Pack bebidas, cervezas, vinos y hielo',
@@ -303,7 +316,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
   },
   {
     id: 'exp-6',
-    date: '2026-08-16',
+    date: demoDate('2026-08-16'),
     amount: 32000,
     category: 'suministros',
     concept: 'Cotillón, vajilla descartable y artículos de limpieza',
@@ -315,7 +328,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
   },
   {
     id: 'exp-7',
-    date: '2026-08-18',
+    date: demoDate('2026-08-18'),
     amount: 28000,
     category: 'gastos_fijos',
     concept: 'Internet Fibra Óptica 500MB + Seguro de Responsabilidad Civil',
@@ -327,7 +340,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
   },
   {
     id: 'exp-8',
-    date: '2026-08-20',
+    date: demoDate('2026-08-20'),
     amount: 85000,
     category: 'pago_personal',
     concept: 'Honorarios DJ y Sonidista evento corporativo',
@@ -341,7 +354,7 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
   },
   {
     id: 'exp-9',
-    date: '2026-08-22',
+    date: demoDate('2026-08-22'),
     amount: 35000,
     category: 'mantenimiento',
     concept: 'Service y limpieza de filtros de aire acondicionado central',

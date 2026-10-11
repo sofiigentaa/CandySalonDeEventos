@@ -78,7 +78,7 @@ export const EventFilters: React.FC<EventFiltersProps> = ({
             <button
               id="btn-create-event-action"
               type="button"
-              onClick={onOpenNewEvent}
+              onClick={() => onOpenNewEvent()}
               className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-pink-600 hover:bg-pink-700 active:scale-95 rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap"
               title="Crear un nuevo evento"
             >

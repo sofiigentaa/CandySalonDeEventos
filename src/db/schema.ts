@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, integer, jsonb, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Users table (Firebase Auth UID)
@@ -27,6 +27,7 @@ export const events = pgTable('events', {
   depositAmount: integer('deposit_amount').notNull().default(0),
   status: text('status').notNull().default('deposit_paid'),
   notes: text('notes'),
+  contractedServices: jsonb('contracted_services'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });

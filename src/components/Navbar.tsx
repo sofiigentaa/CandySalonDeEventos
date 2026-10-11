@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CalendarDays, Table, BellRing, RotateCcw, Trash2, Database, Sparkles, ChevronDown, Wallet, ShieldCheck, FileDown, Calculator } from 'lucide-react';
+import { CalendarDays, Table, BellRing, RotateCcw, Trash2, Database, Sparkles, ChevronDown, Wallet, ShieldCheck, FileDown, Calculator, LogOut } from 'lucide-react';
 import { ViewMode } from '../types.ts';
 import { CandyLogo } from './CandyLogo.tsx';
 
@@ -10,6 +10,7 @@ interface NavbarProps {
   isRefreshing?: boolean;
   onClearAllData?: () => void;
   onResetDemoData?: () => void;
+  onLogout?: () => void;
   onOpenBackupModal?: () => void;
   onOpenQuoteCalculator?: () => void;
   viewMode: ViewMode;
@@ -24,6 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isRefreshing = false,
   onClearAllData,
   onResetDemoData,
+  onLogout,
   onOpenBackupModal,
   onOpenQuoteCalculator,
   viewMode,
@@ -231,8 +233,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       >
                         <RotateCcw className={`w-4 h-4 text-pink-600 ${isRefreshing ? 'animate-spin' : ''}`} />
                         <div>
-                          <p className="font-semibold text-slate-800">Sincronizar con Supabase</p>
-                          <p className="text-[10px] text-slate-400">Recargar datos en vivo</p>
+                          <p className="font-semibold text-slate-800">Actualizar datos</p>
+                          <p className="text-[10px] text-slate-400">Volver a leer del servidor</p>
                         </div>
                       </button>
                     )}
@@ -270,6 +272,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <p className="font-medium text-slate-700">Cargar datos de ejemplo</p>
                           <p className="text-[10px] text-slate-400">Para probar el sistema</p>
                         </div>
+                      </button>
+                    )}
+
+                    {/* Cerrar sesión */}
+                    {onLogout && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onLogout();
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 mt-0.5 text-xs text-slate-700 hover:bg-slate-100 rounded-xl transition-colors text-left cursor-pointer font-medium border-t border-slate-100"
+                      >
+                        <LogOut className="w-4 h-4 text-slate-500" />
+                        <p className="font-semibold text-slate-800">Cerrar sesión</p>
                       </button>
                     )}
                   </div>
