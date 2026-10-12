@@ -665,11 +665,34 @@ export default function App() {
     let ingresos = 0;
     events.forEach((e) => (e.paymentHistory || []).forEach((p) => { if (p.date?.startsWith(mes)) ingresos += p.concept === 'Devolución' ? -p.amount : p.amount; }));
     const gastos = expenses.filter((x) => x.date?.startsWith(mes)).reduce((a, x) => a + x.amount, 0);
+    const ir = (accion: () => void) => () => {
+      setVista('sistema');
+      accion();
+    };
     return [
-      { titulo: 'Eventos de los próximos 7 días', lineas: semana.length ? semana.map((e) => `${corta(e.eventDate)} ${e.eventTime || ''} · ${e.title}`) : ['No hay eventos'] },
-      { titulo: 'Saldos por cobrar', lineas: conSaldo.length ? [`${fmt(conSaldo.reduce((a, e) => a + getRemainingBalance(e), 0))} en ${conSaldo.length} ${conSaldo.length === 1 ? 'evento' : 'eventos'}`] : ['Todo cobrado'] },
-      { titulo: 'Pendientes de hoy', lineas: pendientes.length ? pendientes.slice(0, 10).map((r) => r.title) : ['Nada pendiente'] },
-      { titulo: 'Este mes', lineas: [`Entró ${fmt(ingresos)}`, `Gastos ${fmt(gastos)}`] },
+      {
+        titulo: 'Eventos de los próximos 7 días',
+        lineas: semana.length ? semana.map((e) => `${corta(e.eventDate)} ${e.eventTime || ''} · ${e.title}`) : ['No hay eventos'],
+        ver: ir(() => {
+          setViewMode('table');
+          setStatusFilter('upcoming_7_days');
+        }),
+      },
+      {
+        titulo: 'Saldos por cobrar',
+        lineas: conSaldo.length ? [`${fmt(conSaldo.reduce((a, e) => a + getRemainingBalance(e), 0))} en ${conSaldo.length} ${conSaldo.length === 1 ? 'evento' : 'eventos'}`] : ['Todo cobrado'],
+        ver: ir(() => {
+          setViewMode('table');
+          setStatusFilter('pending_balance');
+        }),
+      },
+      {
+        titulo: 'Pendientes de hoy',
+        lineas: pendientes.length ? pendientes.slice(0, 10).map((r) => r.title) : ['Nada pendiente'],
+        pendientes: pendientes.length,
+        ver: ir(() => handleOpenReminders()),
+      },
+      { titulo: 'Este mes', lineas: [`Entró ${fmt(ingresos)}`, `Gastos ${fmt(gastos)}`], ver: ir(() => setViewMode('cashflow')) },
     ];
   };
 
