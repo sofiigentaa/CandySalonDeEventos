@@ -18,7 +18,7 @@ export const CalandriaMark: React.FC<{ className?: string; light?: boolean }> = 
   </svg>
 );
 
-const KIND_LABEL: Record<CalandriaKind, string> = {
+export const KIND_LABEL: Record<CalandriaKind, string> = {
   cobro_saldo: 'Aviso de saldos pendientes',
   preparativos: 'Tareas de la semana',
   evento_realizado: 'Cierre de eventos realizados',
@@ -35,7 +35,7 @@ const Light: React.FC<{ className?: string }> = ({ className = 'w-2.5 h-2.5' }) 
 };
 
 // Marca del sistema: el logo de Calandria arriba a la izquierda. Tocarlo abre el panel.
-export const CalandriaBrand: React.FC<{ onDark?: boolean }> = ({ onDark = true }) => {
+export const CalandriaBrand: React.FC<{ onDark?: boolean; onClick?: () => void }> = ({ onDark = true, onClick }) => {
   const { suggestions, setPanelOpen, minutesThisMonth, paused } = useCalandria();
   const estado = paused
     ? 'En pausa'
@@ -46,7 +46,7 @@ export const CalandriaBrand: React.FC<{ onDark?: boolean }> = ({ onDark = true }
     <button
       id="calandria-btn"
       type="button"
-      onClick={() => setPanelOpen(true)}
+      onClick={onClick || (() => setPanelOpen(true))}
       className={`relative flex items-center gap-2.5 rounded-xl pr-2 py-1 text-left transition-colors cursor-pointer ${onDark ? 'hover:bg-white/5' : 'hover:bg-slate-100'}`}
       title="Calandria: tareas para aprobar con un botón"
     >

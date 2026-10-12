@@ -17,6 +17,7 @@ interface NavbarProps {
   onViewModeChange: (mode: ViewMode) => void;
   onOpenReminders: () => void;
   pendingRemindersCount: number;
+  onGoHome?: () => void; // volver a la pantalla de la C
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onViewModeChange,
   onOpenReminders,
   pendingRemindersCount,
+  onGoHome,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -58,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Logo & Title */}
           <div className="flex items-center gap-3">
             <div className="flex items-center">
-              <CalandriaBrand onDark={false} />
+              <CalandriaBrand onDark={false} onClick={onGoHome} />
             </div>
           </div>
 

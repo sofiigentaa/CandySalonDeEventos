@@ -60,12 +60,31 @@ import { useAuth } from './contexts/AuthContext.tsx';
 import { BackupPayload } from './utils/backupUtils.ts';
 import { CalandriaProvider } from './calandria/CalandriaContext.tsx';
 import { AsistenteCandy } from './asistente/AsistenteCandy.tsx';
+import { CalandriaHome, ResumenSeccion } from './calandria/CalandriaHome.tsx';
 import { CalandriaPanel, CalandriaLogModal, CalandriaResultModal, CalandriaToast } from './calandria/CalandriaUI.tsx';
 
 import { CalendarPlus, Plus, FilterX } from 'lucide-react';
 
 export default function App() {
   const { logOut } = useAuth();
+
+  // Pantalla principal: la C de Calandria. "Abrir sistema" muestra el sistema completo.
+  const [vista, setVistaState] = useState<'calandria' | 'sistema'>(() => {
+    try {
+      return localStorage.getItem('candy_calandria_vista') === 'sistema' ? 'sistema' : 'calandria';
+    } catch {
+      return 'calandria';
+    }
+  });
+  const setVista = (v: 'calandria' | 'sistema') => {
+    setVistaState(v);
+    try {
+      localStorage.setItem('candy_calandria_vista', v);
+    } catch {
+      // sin almacenamiento: queda solo en memoria
+    }
+    window.scrollTo(0, 0);
+  };
 
   // Avisos de error del servidor (antes los guardados fallaban en silencio)
   const [apiError, setApiError] = useState<string | null>(null);
@@ -630,6 +649,50 @@ export default function App() {
       });
   }, [events, searchTerm, statusFilter, sortOption]);
 
+  // Resumen del día para Compartir / Imprimir.
+  const resumenDia = (): ResumenSeccion[] => {
+    const hoyStr = getTodayString();
+    const limite = new Date(parseLocalDate(hoyStr).getTime() + 7 * 86400000);
+    const fmt = (n: number) => `$${Math.round(n).toLocaleString('es-AR')}`;
+    const corta = (d: string) => parseLocalDate(d).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'numeric' });
+    const activos = events.filter((e) => e.status !== 'cancelled');
+    const semana = activos
+      .filter((e) => e.eventDate >= hoyStr && parseLocalDate(e.eventDate) <= limite)
+      .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+    const conSaldo = activos.filter((e) => e.status !== 'completed' && getRemainingBalance(e) > 0);
+    const pendientes = reminders.filter((r) => !r.completed && r.dueDate <= hoyStr);
+    const mes = hoyStr.slice(0, 7);
+    let ingresos = 0;
+    events.forEach((e) => (e.paymentHistory || []).forEach((p) => { if (p.date?.startsWith(mes)) ingresos += p.concept === 'Devolución' ? -p.amount : p.amount; }));
+    const gastos = expenses.filter((x) => x.date?.startsWith(mes)).reduce((a, x) => a + x.amount, 0);
+    return [
+      { titulo: 'Eventos de los próximos 7 días', lineas: semana.length ? semana.map((e) => `${corta(e.eventDate)} ${e.eventTime || ''} · ${e.title}`) : ['No hay eventos'] },
+      { titulo: 'Saldos por cobrar', lineas: conSaldo.length ? [`${fmt(conSaldo.reduce((a, e) => a + getRemainingBalance(e), 0))} en ${conSaldo.length} ${conSaldo.length === 1 ? 'evento' : 'eventos'}`] : ['Todo cobrado'] },
+      { titulo: 'Pendientes de hoy', lineas: pendientes.length ? pendientes.slice(0, 10).map((r) => r.title) : ['Nada pendiente'] },
+      { titulo: 'Este mes', lineas: [`Entró ${fmt(ingresos)}`, `Gastos ${fmt(gastos)}`] },
+    ];
+  };
+
+  if (vista === 'calandria') {
+    return (
+      <CalandriaProvider
+        salon="Candy Salón de Eventos"
+        events={events}
+        reminders={reminders}
+        expenses={expenses}
+        addReminder={handleAddReminder}
+        saveExpense={handleSaveExpense}
+        saveEvent={(ev) => handleSaveEvent(ev)}
+      >
+        <CalandriaHome negocio="Candy Salón de Eventos" resumen={resumenDia} onOpenSystem={() => setVista('sistema')} />
+        <CalandriaPanel />
+        <CalandriaLogModal />
+        <CalandriaResultModal />
+        <CalandriaToast />
+      </CalandriaProvider>
+    );
+  }
+
   return (
     <CalandriaProvider
       salon="Candy Salón de Eventos"
@@ -656,6 +719,7 @@ export default function App() {
         onViewModeChange={setViewMode}
         onOpenReminders={() => handleOpenReminders()}
         pendingRemindersCount={pendingRemindersCount}
+        onGoHome={() => setVista('calandria')}
       />
 
       {/* Main Container */}
