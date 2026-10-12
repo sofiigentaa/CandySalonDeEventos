@@ -2,7 +2,7 @@ import { createPool, isDatabaseConfigured } from '../db/index.ts';
 import { CALANDRIA_ACTIONS, CALANDRIA_KINDS, CalandriaAction, CalandriaKind, LogEntry, sealEntry } from '../calandria/chain.ts';
 import { ValidationError } from './validation.ts';
 
-// Registro sellado de Calandria (lado servidor).
+// Registro sellado de Cotorra (lado servidor).
 // - El servidor pone el número, la fecha y la huella: el navegador solo dice
 //   qué tipo de tarea fue, la acción, la cantidad y los minutos estimados.
 // - Solo se aceptan tipos y acciones conocidos y números: no puede entrar
@@ -28,7 +28,7 @@ export async function ensureCalandriaTable(): Promise<void> {
     );
     CREATE OR REPLACE FUNCTION calandria_log_no_changes() RETURNS TRIGGER LANGUAGE plpgsql AS $$
     BEGIN
-      RAISE EXCEPTION 'El registro de Calandria no se puede modificar ni borrar';
+      RAISE EXCEPTION 'El registro de Cotorra no se puede modificar ni borrar';
     END;
     $$;
     DROP TRIGGER IF EXISTS calandria_log_no_update ON calandria_log;

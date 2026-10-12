@@ -2,7 +2,7 @@ import { EventItem, ExpenseItem, ReminderCategory, ReminderItem } from '../types
 import { getRemainingBalance, parseLocalDate } from '../utils/dateUtils.ts';
 import { CalandriaKind } from './chain.ts';
 
-// Calandria mira la agenda, los pagos y los gastos del salón y propone las
+// Cotorra mira la agenda, los pagos y los gastos del salón y propone las
 // tareas que se repiten. No hace nada sola: cada propuesta espera el botón.
 // Los minutos son una estimación de cuánto lleva hacerlo a mano.
 
@@ -74,7 +74,7 @@ function cobroSaldo(events: EventItem[], reminders: ReminderItem[], today: Date,
         category: 'cobro_saldo',
         priority: 'high',
         completed: false,
-        notes: 'Creado con Calandria.',
+        notes: 'Creado con Cotorra.',
       })),
       messages: list.map((ev) => ({
         client: ev.clientName,
@@ -114,7 +114,7 @@ function preparativos(events: EventItem[], reminders: ReminderItem[], today: Dat
         category: c.category,
         priority: c.daysBefore <= 1 ? 'high' : 'medium',
         completed: false,
-        notes: 'Creado con Calandria.',
+        notes: 'Creado con Cotorra.',
       })
     );
   }
@@ -173,7 +173,7 @@ function gastosHabituales(expenses: ExpenseItem[], today: Date): Suggestion | nu
       id: `exp-cal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       date: ymd(today),
       receiptNumber: undefined,
-      notes: 'Cargado con Calandria: mismo monto que el mes anterior (se puede editar).',
+      notes: 'Cargado con Cotorra: mismo monto que el mes anterior (se puede editar).',
       createdAt: new Date().toISOString(),
     });
   }

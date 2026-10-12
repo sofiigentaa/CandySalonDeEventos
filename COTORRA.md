@@ -1,6 +1,6 @@
-# Calandria en Candy
+# Cotorra en Candy
 
-Calandria mira la agenda, los pagos y los gastos del salón y **propone** las tareas
+Cotorra mira la agenda, los pagos y los gastos del salón y **propone** las tareas
 que se repiten. No hace nada sola: cada propuesta espera que la apruebes.
 
 ## Qué propone
@@ -12,11 +12,11 @@ que se repiten. No hace nada sola: cada propuesta espera que la apruebes.
 | Gastos fijos del mes | Un gasto con el mismo concepto se cargó cada ~30 días y ya toca de nuevo | Lo carga con el mismo monto del mes anterior (se puede editar) | 2 min por gasto |
 | Cerrar eventos realizados | Eventos que ya pasaron y están totalmente pagos | Los marca como realizados | 1 min por evento |
 
-"Ahora no" la esconde 12 horas. **Pará** pone a Calandria en pausa hasta tocar **Reanudar**.
+"Ahora no" la esconde 12 horas. **Pará** pone a Cotorra en pausa hasta tocar **Reanudar**.
 
 ## El botón
 
-- En pantalla: botón grande **Aprobar** del panel de Calandria.
+- En pantalla: botón grande **Aprobar** del panel de Cotorra.
 - Teclado: **F9**.
 - Botón físico: un ESP32-S3 conectado por USB como teclado que manda **F9**.
   Si el panel está cerrado, el botón primero lo abre (nunca aprueba sin que se vea qué).
@@ -39,19 +39,19 @@ mensajes a clientes se arman en memoria y se borran al cerrarlos.
 
 ## Pantalla principal: la C
 
-Al entrar se ve solo la C de Calandria:
+Al entrar se ve solo la C de Cotorra:
 - **La C** se toca para aprobar la primera notificación (igual que el botón físico o F9).
   La luz alrededor: ámbar = hay algo para aprobar, verde = todo en orden, gris = en pausa.
-- **Notificaciones**: cada tarea que propone Calandria, con ✓ (aprobar) y ✕ (ahora no).
+- **Notificaciones**: cada tarea que propone Cotorra, con ✓ (aprobar) y ✕ (ahora no).
 - **Compartir** (WhatsApp o lo que ofrezca el celular) e **Imprimir**: el resumen del
-  día, lo que Calandria hizo hoy y lo último que preparó (pedido o mensajes).
+  día, lo que Cotorra hizo hoy y lo último que preparó (pedido o mensajes).
 - Abajo: **una solución de tecnoros.ar**.
 - **Abrir sistema** (arriba a la derecha) lleva al sistema completo. Desde ahí, tocando
-  el logo de Calandria se vuelve a la C. Cada equipo recuerda en qué pantalla quedó.
+  el logo de Cotorra se vuelve a la C. Cada equipo recuerda en qué pantalla quedó.
 - "X min ahorrados este mes" abre el panel con la pausa y el registro sellado.
 - **Hoy**: el informe del día en pantalla (lo mismo que se imprime). Cada parte tiene
   "Ver" y lleva al detalle: por ejemplo, los eventos con saldo, los recordatorios de hoy,
-  lo que hay que reponer, los fiados o el registro de lo que hizo Calandria hoy.
+  lo que hay que reponer, los fiados o el registro de lo que hizo Cotorra hoy.
 - La C dice "Todo en orden" solo si no hay nada para aprobar **ni** nada para revisar;
   si quedan pendientes dice "Nada para aprobar · N cosas para revisar" (luz celeste).
 
@@ -63,4 +63,4 @@ Al entrar se ve solo la C de Calandria:
   mismo gasto del mes) ya lo propone. Las tareas por reglas (vencimientos, stock
   mínimo, saldos, fiados) funcionan desde el primer día, con los datos que ya hay.
 - Se instala como **aplicación** en el celular o la compu ("Agregar a la pantalla de
-  inicio" / "Instalar"), con el nombre y el ícono de Calandria.
+  inicio" / "Instalar"), con el nombre y el ícono de Cotorra.

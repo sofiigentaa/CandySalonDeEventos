@@ -219,7 +219,7 @@ export const CalandriaProvider: React.FC<ProviderProps> = ({ children, salon, ev
       }
       markSnoozed(s.key, DONE_MS);
       record(s.kind, 'aprobada', s.qty, s.minutes);
-      showToast(`Listo. Calandria te ahorró ~${s.minutes} min.`);
+      showToast(`Listo. Cotorra te ahorró ~${s.minutes} min.`);
     },
     [addReminder, saveEvent, saveExpense, record, markSnoozed]
   );
@@ -237,7 +237,7 @@ export const CalandriaProvider: React.FC<ProviderProps> = ({ children, salon, ev
     setPaused(next);
     writeJson(PREFS, { paused: next });
     record('sistema', next ? 'pausa' : 'reanudada', 0, 0);
-    showToast(next ? 'Calandria en pausa: no propone nada hasta que la reanudes.' : 'Calandria volvió a mirar.');
+    showToast(next ? 'Cotorra en pausa: no propone nada hasta que la reanudes.' : 'Cotorra volvió a mirar.');
   }, [paused, record]);
 
   const suggestionsRef = useRef(suggestions);
@@ -259,7 +259,7 @@ export const CalandriaProvider: React.FC<ProviderProps> = ({ children, salon, ev
     if (first) approve(first);
   }, [approve]);
 
-  // F9 = botón Calandria (un ESP32 conectado por USB como teclado manda F9).
+  // F9 = botón Cotorra (un ESP32 conectado por USB como teclado manda F9).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'F9') {

@@ -68,7 +68,7 @@ import { CalendarPlus, Plus, FilterX } from 'lucide-react';
 export default function App() {
   const { logOut } = useAuth();
 
-  // Pantalla principal: la C de Calandria. "Abrir sistema" muestra el sistema completo.
+  // Pantalla principal: la C de Cotorra. "Abrir sistema" muestra el sistema completo.
   const [vista, setVistaState] = useState<'calandria' | 'sistema'>(() => {
     try {
       return localStorage.getItem('candy_calandria_vista') === 'sistema' ? 'sistema' : 'calandria';
@@ -991,7 +991,7 @@ export default function App() {
         </a>
       </footer>
 
-      {/* Calandria */}
+      {/* Cotorra */}
       <CalandriaPanel />
       <CalandriaLogModal />
       <CalandriaResultModal />

@@ -248,19 +248,19 @@ export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, s
       palabras: ['gasto', 'egreso', 'cargo', 'anoto', 'cargar'],
       requiere: ['como', 'donde'],
       responder: () => ({
-        texto: 'Para cargar un gasto: en "Flujo de Caja" tocá "Nuevo egreso", elegí la categoría y el monto. Si es un gasto fijo, Calandria lo aprende y te lo propone cada mes.',
+        texto: 'Para cargar un gasto: en "Flujo de Caja" tocá "Nuevo egreso", elegí la categoría y el monto. Si es un gasto fijo, Cotorra lo aprende y te lo propone cada mes.',
         accion: { etiqueta: 'Cargar un gasto', hacer: openNewExpense },
       }),
     },
     {
       id: 'calandria',
-      chip: '¿Qué hace Calandria?',
-      palabras: ['calandria', 'boton', 'automat', 'luz'],
+      chip: '¿Qué hace Cotorra?',
+      palabras: ['cotorra', 'calandria', 'boton', 'automat', 'luz'],
       responder: () => ({
-        texto: `Calandria mira los eventos, los pagos y los gastos y te propone las tareas de siempre: avisar saldos, armar las tareas de la semana, cargar gastos fijos. Vos aprobás con un botón (o F9).${
+        texto: `Cotorra mira los eventos, los pagos y los gastos y te propone las tareas de siempre: avisar saldos, armar las tareas de la semana, cargar gastos fijos. Vos aprobás con un botón (o F9).${
           cal.suggestions.length ? `\nAhora tiene ${cal.suggestions.length} ${cal.suggestions.length === 1 ? 'tarea lista' : 'tareas listas'}.` : '\nAhora no tiene nada pendiente.'
         }`,
-        accion: { etiqueta: 'Abrir Calandria', hacer: () => cal.setPanelOpen(true), enLugar: true },
+        accion: { etiqueta: 'Abrir Cotorra', hacer: () => cal.setPanelOpen(true), enLugar: true },
       }),
     },
     {
@@ -290,7 +290,7 @@ export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, s
   return (
     <AsistenteChat
       temas={temas}
-      saludo="¡Hola! Soy el asistente de Calandria. Preguntame qué eventos hay, quién debe, si una fecha está libre o cómo se hace algo."
+      saludo="¡Hola! Soy el asistente de Cotorra. Preguntame qué eventos hay, quién debe, si una fecha está libre o cómo se hace algo."
       soporteWhatsapp={SOPORTE}
       soporteMensaje={`Hola tecnoros.ar, necesito ayuda con el sistema de ${SALON}.`}
       colorBoton="bg-slate-900 hover:bg-slate-800 text-white ring-2 ring-cyan-400/60"

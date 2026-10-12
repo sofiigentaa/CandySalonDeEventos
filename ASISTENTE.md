@@ -11,7 +11,7 @@ nada de lo que se escribe sale del navegador y no guarda la conversación.
 - ¿Cuánto entró este mes? · ¿Cuánto gasté este mes? · ¿Cómo vamos este mes?
 
 **Cómo se hace**: cargar un evento, registrar una seña o pago y el recibo, el
-contrato, armar un presupuesto, cargar un gasto y qué hace Calandria. Cada
+contrato, armar un presupuesto, cargar un gasto y qué hace Cotorra. Cada
 respuesta trae un botón que lleva a la pantalla correspondiente.
 
 **Soporte**: "Hablar con soporte" abre WhatsApp con tecnoros.ar. El número se

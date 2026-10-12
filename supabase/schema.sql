@@ -95,7 +95,7 @@ ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON users, events, payments, reminders, expenses FROM anon, authenticated;
 REVOKE ALL ON SEQUENCE receipt_number_seq FROM anon, authenticated;
 
--- Calandria: registro sellado. Solo se agregan líneas; la base no deja
+-- Cotorra: registro sellado. Solo se agregan líneas; la base no deja
 -- modificarlas ni borrarlas (tampoco "Vaciar todo"). Sin datos personales.
 CREATE TABLE IF NOT EXISTS calandria_log (
   seq INTEGER PRIMARY KEY,
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS calandria_log (
 );
 CREATE OR REPLACE FUNCTION calandria_log_no_changes() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
-  RAISE EXCEPTION 'El registro de Calandria no se puede modificar ni borrar';
+  RAISE EXCEPTION 'El registro de Cotorra no se puede modificar ni borrar';
 END;
 $$;
 DROP TRIGGER IF EXISTS calandria_log_no_update ON calandria_log;

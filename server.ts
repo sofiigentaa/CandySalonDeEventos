@@ -181,12 +181,12 @@ async function startServer() {
     }
   });
 
-  // Calandria: registro sellado (solo se agrega; nunca se modifica ni se borra).
+  // Cotorra: registro sellado (solo se agrega; nunca se modifica ni se borra).
   app.get('/api/calandria/log', async (_req, res) => {
     try {
       res.json(await getCalandriaLog());
     } catch (error) {
-      sendError(res, error, 'No se pudo leer el registro de Calandria.');
+      sendError(res, error, 'No se pudo leer el registro de Cotorra.');
     }
   });
 
@@ -194,7 +194,7 @@ async function startServer() {
     try {
       res.json({ success: true, entry: await appendCalandriaLog(validateLogInput(req.body)) });
     } catch (error) {
-      sendError(res, error, 'No se pudo registrar la acción de Calandria.');
+      sendError(res, error, 'No se pudo registrar la acción de Cotorra.');
     }
   });
 
