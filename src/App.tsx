@@ -685,6 +685,18 @@ export default function App() {
         saveEvent={(ev) => handleSaveEvent(ev)}
       >
         <CalandriaHome negocio="Candy Salón de Eventos" resumen={resumenDia} onOpenSystem={() => setVista('sistema')} />
+        <AsistenteCandy
+          events={events}
+          reminders={reminders}
+          expenses={expenses}
+          setViewMode={setViewMode}
+          openNewEvent={(date) => handleOpenNewEvent(date)}
+          openNewExpense={handleOpenNewExpense}
+          openReminders={() => handleOpenReminders()}
+          openQuote={handleOpenQuoteCalculator}
+          antesDeAccion={() => setVista('sistema')}
+          posicion="bottom-5 right-4 sm:right-6"
+        />
         <CalandriaPanel />
         <CalandriaLogModal />
         <CalandriaResultModal />

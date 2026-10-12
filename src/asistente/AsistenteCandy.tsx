@@ -59,9 +59,11 @@ interface Props {
   openNewExpense: () => void;
   openReminders: () => void;
   openQuote: () => void;
+  antesDeAccion?: () => void;
+  posicion?: string;
 }
 
-export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, setViewMode, openNewEvent, openNewExpense, openReminders, openQuote }) => {
+export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, setViewMode, openNewEvent, openNewExpense, openReminders, openQuote, antesDeAccion, posicion }) => {
   const cal = useCalandria();
   const activos = events.filter((e) => e.status !== 'cancelled');
   const hoy = getTodayString();
@@ -258,7 +260,7 @@ export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, s
         texto: `Calandria mira los eventos, los pagos y los gastos y te propone las tareas de siempre: avisar saldos, armar las tareas de la semana, cargar gastos fijos. Vos aprobás con un botón (o F9).${
           cal.suggestions.length ? `\nAhora tiene ${cal.suggestions.length} ${cal.suggestions.length === 1 ? 'tarea lista' : 'tareas listas'}.` : '\nAhora no tiene nada pendiente.'
         }`,
-        accion: { etiqueta: 'Abrir Calandria', hacer: () => cal.setPanelOpen(true) },
+        accion: { etiqueta: 'Abrir Calandria', hacer: () => cal.setPanelOpen(true), enLugar: true },
       }),
     },
     {
@@ -277,6 +279,7 @@ export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, s
       responder: () => ({
         texto: 'Te atiende el equipo de tecnoros.ar por WhatsApp. Contanos qué pasó y en qué pantalla.',
         accion: {
+          enLugar: true,
           etiqueta: 'Escribir a soporte',
           hacer: () => window.open(`https://wa.me/${SOPORTE}?text=${encodeURIComponent(`Hola tecnoros.ar, necesito ayuda con el sistema de ${SALON}.`)}`, '_blank', 'noopener'),
         },
@@ -291,7 +294,8 @@ export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, s
       soporteWhatsapp={SOPORTE}
       soporteMensaje={`Hola tecnoros.ar, necesito ayuda con el sistema de ${SALON}.`}
       colorBoton="bg-slate-900 hover:bg-slate-800 text-white ring-2 ring-cyan-400/60"
-      posicion="bottom-20 right-4 md:bottom-6 md:right-6"
+      posicion={posicion || "bottom-20 right-4 md:bottom-6 md:right-6"}
+      antesDeAccion={antesDeAccion}
     />
   );
 };
