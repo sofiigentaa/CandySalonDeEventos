@@ -59,6 +59,7 @@ import { MobileBottomNav } from './components/MobileBottomNav.tsx';
 import { useAuth } from './contexts/AuthContext.tsx';
 import { BackupPayload } from './utils/backupUtils.ts';
 import { CalandriaProvider } from './calandria/CalandriaContext.tsx';
+import { AsistenteCandy } from './asistente/AsistenteCandy.tsx';
 import { CalandriaPanel, CalandriaLogModal, CalandriaResultModal, CalandriaToast } from './calandria/CalandriaUI.tsx';
 
 import { CalendarPlus, Plus, FilterX } from 'lucide-react';
@@ -900,6 +901,16 @@ export default function App() {
       <CalandriaLogModal />
       <CalandriaResultModal />
       <CalandriaToast />
+      <AsistenteCandy
+        events={events}
+        reminders={reminders}
+        expenses={expenses}
+        setViewMode={setViewMode}
+        openNewEvent={(date) => handleOpenNewEvent(date)}
+        openNewExpense={handleOpenNewExpense}
+        openReminders={() => handleOpenReminders()}
+        openQuote={handleOpenQuoteCalculator}
+      />
     </div>
     </CalandriaProvider>
   );

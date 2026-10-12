@@ -34,5 +34,5 @@ mensajes a clientes se arman en memoria y se borran al cerrarlos.
 - La tabla `calandria_log` no deja modificar ni borrar líneas, y "Vaciar todo" /
   "Restablecer demo" no la tocan. La API pública de Supabase no tiene acceso.
 - Sin conexión, la acción queda pendiente en el equipo y se sube sola.
-- "Exportar para auditoría" baja el registro en JSON (con la fórmula) o CSV.
-  Conviene exportarlo una vez por mes y guardarlo.
+- El registro se ve en pantalla (con la verificación). Para una auditoría,
+  tecnoros.ar lo saca directo de la base de datos; el cliente no tiene que hacer nada.
