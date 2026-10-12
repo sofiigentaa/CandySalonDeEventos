@@ -17,7 +17,7 @@ interface NavbarProps {
   onViewModeChange: (mode: ViewMode) => void;
   onOpenReminders: () => void;
   pendingRemindersCount: number;
-  onGoHome?: () => void; // volver a la pantalla de la C
+  onGoHome?: () => void; // volver a la pantalla de la G
 }
 
 export const Navbar: React.FC<NavbarProps> = ({

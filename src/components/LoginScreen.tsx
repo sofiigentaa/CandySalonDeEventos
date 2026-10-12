@@ -28,7 +28,7 @@ export const LoginScreen: React.FC = () => {
       >
         <div className="flex flex-col items-center gap-2">
           <CalandriaMark className="w-14 h-16" />
-          <div className="font-bold text-xl text-slate-900 tracking-tight">Cotorra</div>
+          <div className="font-bold text-xl text-slate-900 tracking-tight">Golondrina</div>
           <p className="text-xs text-slate-500 flex items-center gap-1.5">
             <Lock className="w-3.5 h-3.5" /> Acceso al sistema
           </p>

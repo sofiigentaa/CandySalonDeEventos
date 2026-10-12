@@ -27,8 +27,8 @@ npm install
 npm run dev        # sin DATABASE_URL: modo demo en memoria; entrar con cualquier email y la clave "candy-demo"
 ```
 
-## Cotorra
+## Golondrina
 
 El servidor crea solo la tabla del registro sellado (`calandria_log`) al arrancar.
 Si el salón ya estaba andando, conviene volver a correr `supabase/schema.sql` para
-dejarla también cerrada a la API pública. Cómo funciona: ver `COTORRA.md`.
+dejarla también cerrada a la API pública. Cómo funciona: ver `GOLONDRINA.md`.

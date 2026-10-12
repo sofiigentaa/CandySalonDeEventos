@@ -270,7 +270,7 @@ export const INITIAL_REMINDERS: ReminderItem[] = [
 const EXPENSES_STORAGE_KEY = 'gestor_eventos_candy_expenses_v1';
 
 export const INITIAL_EXPENSES: ExpenseItem[] = [
-  // Mes anterior: con esto Cotorra "aprende" qué gastos son fijos.
+  // Mes anterior: con esto Golondrina "aprende" qué gastos son fijos.
   {
     id: 'exp-0a',
     date: demoDate('2026-07-06'),
