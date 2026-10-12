@@ -1,0 +1,38 @@
+# Despliegue en Render (Blueprint). La base de datos vive en Supabase.
+# Render → New → Blueprint → elegir este repo. Los valores marcados con
+# "sync: false" se cargan a mano en el panel (no se guardan en GitHub).
+services:
+  - type: web
+    name: candy-salon-eventos
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Cadena de conexión del POOLER de Supabase (Connect → Session pooler).
+      # Ej: postgresql://postgres.<ref>:<clave>@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+      - key: DATABASE_URL
+        sync: false
+      # Contraseña para entrar al sistema (mínimo 12 caracteres).
+      - key: SALON_PASSWORD
+        sync: false
+      # Emails que pueden entrar, separados por coma (ej: duena@gmail.com,socia@gmail.com)
+      - key: SALON_EMAILS
+        sync: false
+      # Firma de la sesión: Render la genera sola.
+      - key: SESSION_SECRET
+        generateValue: true
+      # Opcional: IA para redactar contratos.
+      - key: GEMINI_API_KEY
+        sync: false
+      # Solo para una demo pública: habilita "Vaciar todo" y "Datos de ejemplo".
+      - key: ALLOW_DEMO_RESET
+        value: "false"
+      - key: SEED_DEMO
+        value: "false"

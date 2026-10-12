@@ -69,6 +69,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       return;
     }
 
+    if (!Number.isInteger(numAmount)) {
+      alert('Ingresá el monto sin centavos.');
+      return;
+    }
+
+    if (numAmount > currentRemaining) {
+      alert(
+        currentRemaining > 0
+          ? `El pago no puede superar el saldo pendiente (${formatCurrency(currentRemaining, currency)}). Si se agregó un adicional, primero actualizá el total del evento.`
+          : 'Este evento ya está totalmente abonado. Si se agregó un adicional, primero actualizá el total del evento.'
+      );
+      return;
+    }
+
     const trimmedConcept = concept.trim();
     if (!trimmedConcept) {
       alert('Por favor ingresa un concepto.');

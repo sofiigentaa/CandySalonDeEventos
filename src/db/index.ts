@@ -7,6 +7,11 @@ declare global {
   var _postgresPool: Pool | undefined;
 }
 
+// Hay base de datos solo si se configuró DATABASE_URL o SQL_HOST.
+export const isDatabaseConfigured = Boolean(
+  process.env.DATABASE_URL || process.env.SQL_DATABASE_URL || process.env.SQL_HOST
+);
+
 // Function to create or retrieve the connection pool
 export const createPool = () => {
   if (!global._postgresPool) {
