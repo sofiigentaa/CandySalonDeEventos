@@ -40,6 +40,8 @@ interface CalandriaContextType {
 
 const Ctx = createContext<CalandriaContextType | null>(null);
 const SNOOZE_MS = 12 * 60 * 60 * 1000;
+// Lo aprobado no vuelve a aparecer igual (si cambia algo, la propuesta cambia de clave y aparece de nuevo).
+const DONE_MS = 3 * 24 * 60 * 60 * 1000;
 const PREFS = 'candy_calandria_prefs';
 const SNOOZE = 'candy_calandria_snooze';
 const PENDING = 'candy_calandria_pending';
@@ -169,6 +171,21 @@ export const CalandriaProvider: React.FC<ProviderProps> = ({ children, salon, ev
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   };
 
+  // Esconde una propuesta por un tiempo (functional update: sirve aunque se llame varias veces seguidas).
+  const markSnoozed = useCallback(
+    (key: string, ms: number) => {
+      setSnoozed((prev) => {
+        const now = Date.now();
+        const next: Record<string, number> = { ...prev, [key]: now + ms };
+        Object.keys(next).forEach((k) => next[k] < now && delete next[k]);
+        writeJson(SNOOZE, next);
+        return next;
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   const suggestions = useMemo(() => {
     if (paused) return [];
     const now = Date.now();
@@ -189,22 +206,19 @@ export const CalandriaProvider: React.FC<ProviderProps> = ({ children, salon, ev
       } else if (p.type === 'gasto_habitual') {
         p.expenses.forEach(saveExpense);
       }
+      markSnoozed(s.key, DONE_MS);
       record(s.kind, 'aprobada', s.qty, s.minutes);
       showToast(`Listo. Calandria te ahorró ~${s.minutes} min.`);
     },
-    [addReminder, saveEvent, saveExpense, record]
+    [addReminder, saveEvent, saveExpense, record, markSnoozed]
   );
 
   const dismiss = useCallback(
     (s: Suggestion) => {
-      const now = Date.now();
-      const next = { ...snoozed, [s.key]: now + SNOOZE_MS };
-      Object.keys(next).forEach((k) => next[k] < now && delete next[k]);
-      setSnoozed(next);
-      writeJson(SNOOZE, next);
+      markSnoozed(s.key, SNOOZE_MS);
       record(s.kind, 'descartada', s.qty, 0);
     },
-    [snoozed, record]
+    [markSnoozed, record]
   );
 
   const togglePause = useCallback(() => {
