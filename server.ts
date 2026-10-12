@@ -18,6 +18,7 @@ import {
   ensureTablesExist,
   isMemoryMode,
 } from './src/db/eventsService.ts';
+import { appendCalandriaLog, ensureCalandriaTable, getCalandriaLog, validateLogInput } from './src/server/calandriaLog.ts';
 import { generateContractWithGemini, chatWithContractAssistant } from './src/utils/aiContractService.ts';
 import { assertProductionSecrets, isProduction, registerAuthRoutes, requireSession } from './src/server/session.ts';
 import {
@@ -65,6 +66,7 @@ async function startServer() {
   // servidor no arranca: es mejor que Render muestre el error a que la app
   // "funcione" sin guardar nada.
   await ensureTablesExist();
+  await ensureCalandriaTable();
   await seedInitialDataIfEmpty();
   console.log(isMemoryMode() ? 'Modo demo: datos en memoria (sin base de datos).' : 'Base de datos PostgreSQL conectada.');
 
@@ -176,6 +178,23 @@ async function startServer() {
       res.json({ success: true, deletedId: req.params.id });
     } catch (error) {
       sendError(res, error, 'No se pudo borrar el egreso.');
+    }
+  });
+
+  // Calandria: registro sellado (solo se agrega; nunca se modifica ni se borra).
+  app.get('/api/calandria/log', async (_req, res) => {
+    try {
+      res.json(await getCalandriaLog());
+    } catch (error) {
+      sendError(res, error, 'No se pudo leer el registro de Calandria.');
+    }
+  });
+
+  app.post('/api/calandria/log', async (req, res) => {
+    try {
+      res.json({ success: true, entry: await appendCalandriaLog(validateLogInput(req.body)) });
+    } catch (error) {
+      sendError(res, error, 'No se pudo registrar la acción de Calandria.');
     }
   });
 

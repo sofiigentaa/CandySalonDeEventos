@@ -58,6 +58,8 @@ import { QuoteCalculatorModal } from './components/QuoteCalculatorModal.tsx';
 import { MobileBottomNav } from './components/MobileBottomNav.tsx';
 import { useAuth } from './contexts/AuthContext.tsx';
 import { BackupPayload } from './utils/backupUtils.ts';
+import { CalandriaProvider } from './calandria/CalandriaContext.tsx';
+import { CalandriaPanel, CalandriaLogModal, CalandriaResultModal, CalandriaToast } from './calandria/CalandriaUI.tsx';
 
 import { CalendarPlus, Plus, FilterX } from 'lucide-react';
 
@@ -628,6 +630,15 @@ export default function App() {
   }, [events, searchTerm, statusFilter, sortOption]);
 
   return (
+    <CalandriaProvider
+      salon="Candy Salón de Eventos"
+      events={events}
+      reminders={reminders}
+      expenses={expenses}
+      addReminder={handleAddReminder}
+      saveExpense={handleSaveExpense}
+      saveEvent={(ev) => handleSaveEvent(ev)}
+    >
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-pink-500 selection:text-white pb-20 md:pb-0">
       {/* Top Navigation */}
       <Navbar
@@ -883,6 +894,13 @@ export default function App() {
           </span>
         </div>
       </footer>
+
+      {/* Calandria */}
+      <CalandriaPanel />
+      <CalandriaLogModal />
+      <CalandriaResultModal />
+      <CalandriaToast />
     </div>
+    </CalandriaProvider>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { CalendarDays, Table, BellRing, RotateCcw, Trash2, Database, Sparkles, ChevronDown, Wallet, ShieldCheck, FileDown, Calculator, LogOut } from 'lucide-react';
 import { ViewMode } from '../types.ts';
 import { CandyLogo } from './CandyLogo.tsx';
+import { CalandriaHeaderButton } from '../calandria/CalandriaUI.tsx';
 
 interface NavbarProps {
   onOpenNewEvent?: () => void;
@@ -106,6 +107,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Flujo de Caja</span>
               </button>
             </div>
+
+            <CalandriaHeaderButton />
 
             {/* Quick Reminders Modal Button */}
             <button

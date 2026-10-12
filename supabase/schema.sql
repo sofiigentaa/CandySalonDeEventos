@@ -94,3 +94,29 @@ ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 
 REVOKE ALL ON users, events, payments, reminders, expenses FROM anon, authenticated;
 REVOKE ALL ON SEQUENCE receipt_number_seq FROM anon, authenticated;
+
+-- Calandria: registro sellado. Solo se agregan líneas; la base no deja
+-- modificarlas ni borrarlas (tampoco "Vaciar todo"). Sin datos personales.
+CREATE TABLE IF NOT EXISTS calandria_log (
+  seq INTEGER PRIMARY KEY,
+  at TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  action TEXT NOT NULL,
+  qty INTEGER NOT NULL DEFAULT 0,
+  minutes INTEGER NOT NULL DEFAULT 0,
+  prev_hash TEXT NOT NULL,
+  hash TEXT NOT NULL
+);
+CREATE OR REPLACE FUNCTION calandria_log_no_changes() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'El registro de Calandria no se puede modificar ni borrar';
+END;
+$$;
+DROP TRIGGER IF EXISTS calandria_log_no_update ON calandria_log;
+CREATE TRIGGER calandria_log_no_update BEFORE UPDATE OR DELETE ON calandria_log
+  FOR EACH ROW EXECUTE FUNCTION calandria_log_no_changes();
+DROP TRIGGER IF EXISTS calandria_log_no_truncate ON calandria_log;
+CREATE TRIGGER calandria_log_no_truncate BEFORE TRUNCATE ON calandria_log
+  FOR EACH STATEMENT EXECUTE FUNCTION calandria_log_no_changes();
+ALTER TABLE calandria_log ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON calandria_log FROM anon, authenticated;
