@@ -287,10 +287,10 @@ export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, s
   return (
     <AsistenteChat
       temas={temas}
-      saludo={`¡Hola! Soy el asistente de ${SALON}. Preguntame qué eventos hay, quién debe, si una fecha está libre o cómo se hace algo.`}
+      saludo="¡Hola! Soy el asistente de Calandria. Preguntame qué eventos hay, quién debe, si una fecha está libre o cómo se hace algo."
       soporteWhatsapp={SOPORTE}
       soporteMensaje={`Hola tecnoros.ar, necesito ayuda con el sistema de ${SALON}.`}
-      colorBoton="bg-pink-600 hover:bg-pink-700 text-white"
+      colorBoton="bg-slate-900 hover:bg-slate-800 text-white ring-2 ring-cyan-400/60"
       posicion="bottom-20 right-4 md:bottom-6 md:right-6"
     />
   );

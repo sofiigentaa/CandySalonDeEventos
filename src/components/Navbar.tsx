@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CalendarDays, Table, BellRing, RotateCcw, Trash2, Database, Sparkles, ChevronDown, Wallet, ShieldCheck, FileDown, Calculator, LogOut } from 'lucide-react';
 import { ViewMode } from '../types.ts';
-import { CandyLogo } from './CandyLogo.tsx';
-import { CalandriaHeaderButton } from '../calandria/CalandriaUI.tsx';
+import { CalandriaBrand } from '../calandria/CalandriaUI.tsx';
 
 interface NavbarProps {
   onOpenNewEvent?: () => void;
@@ -58,8 +57,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between py-2.5 gap-2 sm:gap-4">
           {/* Logo & Title */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center transition-transform hover:scale-[1.02]">
-              <CandyLogo size="md" showSubtitle={true} className="h-9 sm:h-11" />
+            <div className="flex items-center">
+              <CalandriaBrand onDark={false} />
             </div>
           </div>
 
@@ -107,8 +106,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Flujo de Caja</span>
               </button>
             </div>
-
-            <CalandriaHeaderButton />
 
             {/* Quick Reminders Modal Button */}
             <button

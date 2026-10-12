@@ -884,16 +884,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Subtle Footer (Desktop) */}
-      <footer className="hidden md:block bg-white border-t border-slate-200/80 py-4 text-center text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span className="font-semibold text-slate-600">
-            🍭 Candy Salón de Eventos • Gestión Integral & Flujo de Caja
-          </span>
-          <span className="text-slate-400 font-medium">
-            Ingresos • Egresos • Recordatorios
-          </span>
-        </div>
+      {/* Pie: tecnoros.ar */}
+      <footer className="bg-white border-t border-slate-200/80 py-4 text-center text-xs text-slate-400">
+        una solución de{' '}
+        <a href="https://tecnoros-ar.onrender.com" target="_blank" rel="noopener noreferrer" className="font-bold text-slate-700 hover:text-cyan-700">
+          tecnoros.ar
+        </a>
       </footer>
 
       {/* Calandria */}
