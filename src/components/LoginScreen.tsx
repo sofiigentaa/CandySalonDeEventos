@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, LogIn } from 'lucide-react';
-import { CandyLogo } from './CandyLogo.tsx';
+import { CalandriaMark } from '../calandria/CalandriaUI.tsx';
 import { useAuth } from '../contexts/AuthContext.tsx';
 
 export const LoginScreen: React.FC = () => {
@@ -27,9 +27,10 @@ export const LoginScreen: React.FC = () => {
         data-testid="login-form"
       >
         <div className="flex flex-col items-center gap-2">
-          <CandyLogo size="lg" />
+          <CalandriaMark className="w-14 h-16" />
+          <div className="font-bold text-xl text-slate-900 tracking-tight">Golondrina</div>
           <p className="text-xs text-slate-500 flex items-center gap-1.5">
-            <Lock className="w-3.5 h-3.5" /> Acceso del salón
+            <Lock className="w-3.5 h-3.5" /> Acceso al sistema
           </p>
         </div>
 
@@ -73,6 +74,7 @@ export const LoginScreen: React.FC = () => {
           <LogIn className="w-4 h-4" />
           {sending ? 'Ingresando…' : 'Ingresar'}
         </button>
+        <p className="text-center text-[11px] text-slate-400">una solución de <b className="text-slate-600">tecnoros.ar</b></p>
       </form>
     </div>
   );

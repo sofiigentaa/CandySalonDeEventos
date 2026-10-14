@@ -20,9 +20,9 @@ export const INITIAL_EVENTS: EventItem[] = [
   {
     id: 'evt-1',
     title: 'Bautismo de Mateo',
-    clientName: 'Sofía Genta',
+    clientName: 'Lucía Ferreyra',
     clientPhone: '+54 9 11 4589-2231',
-    clientEmail: 'sofiigenta@gmail.com',
+    clientEmail: 'lucia.ferreyra@ejemplo.com',
     eventType: 'Bautismo',
     eventDate: demoDate('2026-09-12'),
     eventTime: '19:30',
@@ -180,6 +180,28 @@ export const INITIAL_EVENTS: EventItem[] = [
     createdAt: '2026-08-22T10:00:00.000Z',
     updatedAt: '2026-08-22T10:00:00.000Z',
   },
+  {
+    id: 'evt-6',
+    title: 'Cumpleaños 8 de Valentina',
+    clientName: 'Paula Medina',
+    clientPhone: '+54 9 341 555-0142',
+    clientEmail: 'paula.medina@ejemplo.com',
+    eventType: 'Cumpleaños',
+    eventDate: demoDate('2026-08-24'),
+    eventTime: '17:00',
+    location: 'Candy Salón de Eventos',
+    guestCount: 45,
+    totalAmount: 260000,
+    depositAmount: 100000,
+    paymentHistory: [
+      { id: 'pay-60', date: demoDate('2026-07-28'), amount: 100000, method: 'Mercado Pago', concept: 'Seña inicial', receiptNumber: 'REC-060' },
+      { id: 'pay-61', date: demoDate('2026-08-20'), amount: 160000, method: 'Efectivo', concept: 'Pago final', receiptNumber: 'REC-061' },
+    ],
+    status: 'fully_paid',
+    notes: 'Animación + inflables. Torta temática.',
+    createdAt: '2026-07-28T15:00:00.000Z',
+    updatedAt: '2026-08-20T18:00:00.000Z',
+  },
 ];
 
 export const INITIAL_REMINDERS: ReminderItem[] = [
@@ -202,7 +224,7 @@ export const INITIAL_REMINDERS: ReminderItem[] = [
     id: 'rem-2',
     eventId: 'evt-1',
     eventTitle: 'Boda Sofía & Mateo',
-    clientName: 'Sofía Genta',
+    clientName: 'Lucía Ferreyra',
     clientPhone: '+54 9 11 4589-2231',
     title: 'Confirmar lista definitiva de invitados y menú especial',
     dueDate: demoDate('2026-09-02'),
@@ -248,6 +270,27 @@ export const INITIAL_REMINDERS: ReminderItem[] = [
 const EXPENSES_STORAGE_KEY = 'gestor_eventos_candy_expenses_v1';
 
 export const INITIAL_EXPENSES: ExpenseItem[] = [
+  // Mes anterior: con esto Golondrina "aprende" qué gastos son fijos.
+  {
+    id: 'exp-0a',
+    date: demoDate('2026-07-06'),
+    amount: 180000,
+    category: 'alquiler',
+    concept: 'Alquiler mensual Salón Principal y Quincho',
+    paymentMethod: 'Transferencia',
+    supplier: 'Inmobiliaria del Parque',
+    receiptNumber: 'ALQ-07-2026',
+    createdAt: '2026-07-06T10:00:00.000Z',
+  },
+  {
+    id: 'exp-0b',
+    date: demoDate('2026-07-09'),
+    amount: 41000,
+    category: 'gastos_fijos',
+    concept: 'Servicio de Electricidad / Edenor',
+    paymentMethod: 'Transferencia',
+    createdAt: '2026-07-09T10:00:00.000Z',
+  },
   {
     id: 'exp-1',
     date: demoDate('2026-08-05'),

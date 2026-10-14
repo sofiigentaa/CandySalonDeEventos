@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CalendarDays, Table, BellRing, RotateCcw, Trash2, Database, Sparkles, ChevronDown, Wallet, ShieldCheck, FileDown, Calculator, LogOut } from 'lucide-react';
 import { ViewMode } from '../types.ts';
-import { CandyLogo } from './CandyLogo.tsx';
+import { CalandriaBrand } from '../calandria/CalandriaUI.tsx';
 
 interface NavbarProps {
   onOpenNewEvent?: () => void;
@@ -17,6 +17,7 @@ interface NavbarProps {
   onViewModeChange: (mode: ViewMode) => void;
   onOpenReminders: () => void;
   pendingRemindersCount: number;
+  onGoHome?: () => void; // volver a la pantalla de la G
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onViewModeChange,
   onOpenReminders,
   pendingRemindersCount,
+  onGoHome,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -57,8 +59,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between py-2.5 gap-2 sm:gap-4">
           {/* Logo & Title */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center transition-transform hover:scale-[1.02]">
-              <CandyLogo size="md" showSubtitle={true} className="h-9 sm:h-11" />
+            <div className="flex items-center">
+              <CalandriaBrand onDark={false} onClick={onGoHome} />
             </div>
           </div>
 

@@ -58,11 +58,33 @@ import { QuoteCalculatorModal } from './components/QuoteCalculatorModal.tsx';
 import { MobileBottomNav } from './components/MobileBottomNav.tsx';
 import { useAuth } from './contexts/AuthContext.tsx';
 import { BackupPayload } from './utils/backupUtils.ts';
+import { CalandriaProvider } from './calandria/CalandriaContext.tsx';
+import { AsistenteCandy } from './asistente/AsistenteCandy.tsx';
+import { CalandriaHome, ResumenSeccion } from './calandria/CalandriaHome.tsx';
+import { CalandriaPanel, CalandriaLogModal, CalandriaResultModal, CalandriaToast } from './calandria/CalandriaUI.tsx';
 
 import { CalendarPlus, Plus, FilterX } from 'lucide-react';
 
 export default function App() {
   const { logOut } = useAuth();
+
+  // Pantalla principal: la G de Golondrina. "Abrir sistema" muestra el sistema completo.
+  const [vista, setVistaState] = useState<'calandria' | 'sistema'>(() => {
+    try {
+      return localStorage.getItem('candy_calandria_vista') === 'sistema' ? 'sistema' : 'calandria';
+    } catch {
+      return 'calandria';
+    }
+  });
+  const setVista = (v: 'calandria' | 'sistema') => {
+    setVistaState(v);
+    try {
+      localStorage.setItem('candy_calandria_vista', v);
+    } catch {
+      // sin almacenamiento: queda solo en memoria
+    }
+    window.scrollTo(0, 0);
+  };
 
   // Avisos de error del servidor (antes los guardados fallaban en silencio)
   const [apiError, setApiError] = useState<string | null>(null);
@@ -627,7 +649,95 @@ export default function App() {
       });
   }, [events, searchTerm, statusFilter, sortOption]);
 
+  // Resumen del día para Compartir / Imprimir.
+  const resumenDia = (): ResumenSeccion[] => {
+    const hoyStr = getTodayString();
+    const limite = new Date(parseLocalDate(hoyStr).getTime() + 7 * 86400000);
+    const fmt = (n: number) => `$${Math.round(n).toLocaleString('es-AR')}`;
+    const corta = (d: string) => parseLocalDate(d).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'numeric' });
+    const activos = events.filter((e) => e.status !== 'cancelled');
+    const semana = activos
+      .filter((e) => e.eventDate >= hoyStr && parseLocalDate(e.eventDate) <= limite)
+      .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+    const conSaldo = activos.filter((e) => e.status !== 'completed' && getRemainingBalance(e) > 0);
+    const pendientes = reminders.filter((r) => !r.completed && r.dueDate <= hoyStr);
+    const mes = hoyStr.slice(0, 7);
+    let ingresos = 0;
+    events.forEach((e) => (e.paymentHistory || []).forEach((p) => { if (p.date?.startsWith(mes)) ingresos += p.concept === 'Devolución' ? -p.amount : p.amount; }));
+    const gastos = expenses.filter((x) => x.date?.startsWith(mes)).reduce((a, x) => a + x.amount, 0);
+    const ir = (accion: () => void) => () => {
+      setVista('sistema');
+      accion();
+    };
+    return [
+      {
+        titulo: 'Eventos de los próximos 7 días',
+        lineas: semana.length ? semana.map((e) => `${corta(e.eventDate)} ${e.eventTime || ''} · ${e.title}`) : ['No hay eventos'],
+        ver: ir(() => {
+          setViewMode('table');
+          setStatusFilter('upcoming_7_days');
+        }),
+      },
+      {
+        titulo: 'Saldos por cobrar',
+        lineas: conSaldo.length ? [`${fmt(conSaldo.reduce((a, e) => a + getRemainingBalance(e), 0))} en ${conSaldo.length} ${conSaldo.length === 1 ? 'evento' : 'eventos'}`] : ['Todo cobrado'],
+        ver: ir(() => {
+          setViewMode('table');
+          setStatusFilter('pending_balance');
+        }),
+      },
+      {
+        titulo: 'Pendientes de hoy',
+        lineas: pendientes.length ? pendientes.slice(0, 10).map((r) => r.title) : ['Nada pendiente'],
+        pendientes: pendientes.length,
+        ver: ir(() => handleOpenReminders()),
+      },
+      { titulo: 'Este mes', lineas: [`Entró ${fmt(ingresos)}`, `Gastos ${fmt(gastos)}`], ver: ir(() => setViewMode('cashflow')) },
+    ];
+  };
+
+  if (vista === 'calandria') {
+    return (
+      <CalandriaProvider
+        salon="Candy Salón de Eventos"
+        events={events}
+        reminders={reminders}
+        expenses={expenses}
+        addReminder={handleAddReminder}
+        saveExpense={handleSaveExpense}
+        saveEvent={(ev) => handleSaveEvent(ev)}
+      >
+        <CalandriaHome negocio="Candy Salón de Eventos" resumen={resumenDia} onOpenSystem={() => setVista('sistema')} />
+        <AsistenteCandy
+          events={events}
+          reminders={reminders}
+          expenses={expenses}
+          setViewMode={setViewMode}
+          openNewEvent={(date) => handleOpenNewEvent(date)}
+          openNewExpense={handleOpenNewExpense}
+          openReminders={() => handleOpenReminders()}
+          openQuote={handleOpenQuoteCalculator}
+          antesDeAccion={() => setVista('sistema')}
+          posicion="bottom-5 right-4 sm:right-6"
+        />
+        <CalandriaPanel />
+        <CalandriaLogModal />
+        <CalandriaResultModal />
+        <CalandriaToast />
+      </CalandriaProvider>
+    );
+  }
+
   return (
+    <CalandriaProvider
+      salon="Candy Salón de Eventos"
+      events={events}
+      reminders={reminders}
+      expenses={expenses}
+      addReminder={handleAddReminder}
+      saveExpense={handleSaveExpense}
+      saveEvent={(ev) => handleSaveEvent(ev)}
+    >
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-pink-500 selection:text-white pb-20 md:pb-0">
       {/* Top Navigation */}
       <Navbar
@@ -644,6 +754,7 @@ export default function App() {
         onViewModeChange={setViewMode}
         onOpenReminders={() => handleOpenReminders()}
         pendingRemindersCount={pendingRemindersCount}
+        onGoHome={() => setVista('calandria')}
       />
 
       {/* Main Container */}
@@ -872,17 +983,30 @@ export default function App() {
         </div>
       )}
 
-      {/* Subtle Footer (Desktop) */}
-      <footer className="hidden md:block bg-white border-t border-slate-200/80 py-4 text-center text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span className="font-semibold text-slate-600">
-            🍭 Candy Salón de Eventos • Gestión Integral & Flujo de Caja
-          </span>
-          <span className="text-slate-400 font-medium">
-            Ingresos • Egresos • Recordatorios
-          </span>
-        </div>
+      {/* Pie: tecnoros.ar */}
+      <footer className="bg-white border-t border-slate-200/80 py-4 text-center text-xs text-slate-400">
+        una solución de{' '}
+        <a href="https://tecnoros-ar.onrender.com" target="_blank" rel="noopener noreferrer" className="font-bold text-slate-700 hover:text-cyan-700">
+          tecnoros.ar
+        </a>
       </footer>
+
+      {/* Golondrina */}
+      <CalandriaPanel />
+      <CalandriaLogModal />
+      <CalandriaResultModal />
+      <CalandriaToast />
+      <AsistenteCandy
+        events={events}
+        reminders={reminders}
+        expenses={expenses}
+        setViewMode={setViewMode}
+        openNewEvent={(date) => handleOpenNewEvent(date)}
+        openNewExpense={handleOpenNewExpense}
+        openReminders={() => handleOpenReminders()}
+        openQuote={handleOpenQuoteCalculator}
+      />
     </div>
+    </CalandriaProvider>
   );
 }
