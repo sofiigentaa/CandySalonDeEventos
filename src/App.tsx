@@ -133,6 +133,8 @@ export default function App() {
   // Reminders Modal state
   const [isRemindersModalOpen, setIsRemindersModalOpen] = useState(false);
   const [selectedEventIdForReminder, setSelectedEventIdForReminder] = useState<string | undefined>(undefined);
+  const [selectedReminderForEdit, setSelectedReminderForEdit] = useState<ReminderItem | null>(null);
+  const [startNewReminder, setStartNewReminder] = useState(false);
 
   // Expenses Modal state
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -285,7 +287,23 @@ export default function App() {
   };
 
   const handleOpenReminders = (eventId?: string) => {
+    setSelectedReminderForEdit(null);
+    setStartNewReminder(false);
     setSelectedEventIdForReminder(eventId);
+    setIsRemindersModalOpen(true);
+  };
+
+  const handleOpenNewReminderFromAssistant = () => {
+    setSelectedReminderForEdit(null);
+    setSelectedEventIdForReminder(undefined);
+    setStartNewReminder(true);
+    setIsRemindersModalOpen(true);
+  };
+
+  const handleEditReminderFromAssistant = (reminder: ReminderItem) => {
+    setSelectedReminderForEdit(reminder);
+    setStartNewReminder(false);
+    setSelectedEventIdForReminder(undefined);
     setIsRemindersModalOpen(true);
   };
 
@@ -716,7 +734,18 @@ export default function App() {
           openNewEvent={(date) => handleOpenNewEvent(date)}
           openNewExpense={handleOpenNewExpense}
           openReminders={() => handleOpenReminders()}
+          openNewReminder={handleOpenNewReminderFromAssistant}
           openQuote={handleOpenQuoteCalculator}
+          openPayment={handleOpenPaymentModal}
+          openReceipt={handleOpenReceiptModal}
+          editEvent={handleEditEvent}
+          deleteEvent={(event) => handleDeleteEvent(event.id)}
+          saveEvent={(event) => handleSaveEvent(event)}
+          editExpense={handleEditExpense}
+          deleteExpense={(expense) => handleDeleteExpense(expense.id)}
+          editReminder={handleEditReminderFromAssistant}
+          deleteReminder={(reminder) => handleDeleteReminder(reminder.id)}
+          toggleReminder={handleToggleCompleteReminder}
           antesDeAccion={() => setVista('sistema')}
           posicion="bottom-5 right-4 sm:right-6"
         />
@@ -929,7 +958,11 @@ export default function App() {
 
       <RemindersModal
         isOpen={isRemindersModalOpen}
-        onClose={() => setIsRemindersModalOpen(false)}
+        onClose={() => {
+          setIsRemindersModalOpen(false);
+          setSelectedReminderForEdit(null);
+          setStartNewReminder(false);
+        }}
         reminders={reminders}
         events={events}
         currency={currency}
@@ -938,6 +971,8 @@ export default function App() {
         onToggleComplete={handleToggleCompleteReminder}
         onDeleteReminder={handleDeleteReminder}
         initialEventId={selectedEventIdForReminder}
+        initialReminder={selectedReminderForEdit}
+        startNewReminder={startNewReminder}
       />
 
       <ExpenseModal
@@ -1004,7 +1039,18 @@ export default function App() {
         openNewEvent={(date) => handleOpenNewEvent(date)}
         openNewExpense={handleOpenNewExpense}
         openReminders={() => handleOpenReminders()}
+        openNewReminder={handleOpenNewReminderFromAssistant}
         openQuote={handleOpenQuoteCalculator}
+        openPayment={handleOpenPaymentModal}
+        openReceipt={handleOpenReceiptModal}
+        editEvent={handleEditEvent}
+        deleteEvent={(event) => handleDeleteEvent(event.id)}
+        saveEvent={(event) => handleSaveEvent(event)}
+        editExpense={handleEditExpense}
+        deleteExpense={(expense) => handleDeleteExpense(expense.id)}
+        editReminder={handleEditReminderFromAssistant}
+        deleteReminder={(reminder) => handleDeleteReminder(reminder.id)}
+        toggleReminder={handleToggleCompleteReminder}
       />
     </div>
     </CalandriaProvider>

@@ -2,7 +2,7 @@ import React from 'react';
 import { EventItem, ExpenseItem, ReminderItem, ViewMode } from '../types.ts';
 import { getRemainingBalance, getTodayString, parseLocalDate } from '../utils/dateUtils.ts';
 import { useCalandria } from '../calandria/CalandriaContext.tsx';
-import { AsistenteChat, Tema } from './AsistenteChat.tsx';
+import { AsistenteChat, Tema, normalizar } from './AsistenteChat.tsx';
 
 // Soporte de tecnoros.ar (se puede cambiar con VITE_SOPORTE_WHATSAPP).
 const SOPORTE = ((import.meta as any).env?.VITE_SOPORTE_WHATSAPP || '5493413130336').replace(/\D/g, '');
@@ -58,12 +58,45 @@ interface Props {
   openNewEvent: (date?: string) => void;
   openNewExpense: () => void;
   openReminders: () => void;
+  openNewReminder: () => void;
   openQuote: () => void;
+  openPayment: (event: EventItem) => void;
+  openReceipt: (event: EventItem) => void;
+  editEvent: (event: EventItem) => void;
+  deleteEvent: (event: EventItem) => void;
+  saveEvent: (event: EventItem) => void;
+  editExpense: (expense: ExpenseItem) => void;
+  deleteExpense: (expense: ExpenseItem) => void;
+  editReminder: (reminder: ReminderItem) => void;
+  deleteReminder: (reminder: ReminderItem) => void;
+  toggleReminder: (id: string) => void;
   antesDeAccion?: () => void;
   posicion?: string;
 }
 
-export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, setViewMode, openNewEvent, openNewExpense, openReminders, openQuote, antesDeAccion, posicion }) => {
+export const AsistenteCandy: React.FC<Props> = ({
+  events,
+  reminders,
+  expenses,
+  setViewMode,
+  openNewEvent,
+  openNewExpense,
+  openReminders,
+  openNewReminder,
+  openQuote,
+  openPayment,
+  openReceipt,
+  editEvent,
+  deleteEvent,
+  saveEvent,
+  editExpense,
+  deleteExpense,
+  editReminder,
+  deleteReminder,
+  toggleReminder,
+  antesDeAccion,
+  posicion,
+}) => {
   const cal = useCalandria();
   const activos = events.filter((e) => e.status !== 'cancelled');
   const hoy = getTodayString();
@@ -82,8 +115,160 @@ export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, s
     return { total, cantidad };
   };
   const gastosMes = () => expenses.filter((x) => x.date?.startsWith(mes));
+  const buscarEvento = (q: string) => {
+    return events.filter((e) => {
+      const titulo = normalizar(e.title);
+      const cliente = normalizar(e.clientName);
+      return [titulo, cliente].some((term) => term.length > 0 && q.includes(term));
+    });
+  };
+  const buscarGasto = (q: string) => {
+    return expenses.filter((e) => {
+      const concepto = normalizar(e.concept);
+      const proveedor = normalizar(e.supplier || '');
+      return [concepto, proveedor].some((term) => term.length > 0 && q.includes(term));
+    });
+  };
 
   const temas: Tema[] = [
+    {
+      id: 'gestionar',
+      palabras: ['crear evento', 'crear un evento', 'nuevo evento', 'editar evento', 'modificar evento', 'eliminar evento', 'borrar evento', 'marcar evento realizado', 'marcar evento como realizado', 'completar evento', 'registrar pago', 'registrar un pago', 'anotar pago', 'anotar un pago', 'cargar pago', 'cargar un pago', 'ver pagos de', 'historial de pagos', 'nuevo gasto', 'crear gasto', 'crear un gasto', 'registrar egreso', 'registrar un egreso', 'editar gasto', 'eliminar gasto', 'crear recordatorio', 'crear un recordatorio', 'nuevo recordatorio', 'editar recordatorio', 'modificar recordatorio', 'eliminar recordatorio', 'borrar recordatorio', 'completar recordatorio', 'marcar recordatorio'],
+      responder: (q) => {
+        if (q.includes('como') || q.includes('donde')) return null;
+        if (q.includes('crear evento') || q.includes('crear un evento') || q.includes('nuevo evento')) {
+          const fecha = fechaEn(q);
+          return {
+            texto: `Voy a abrir el formulario para ${fecha ? `crear el evento el ${larga(fecha)}` : 'crear un evento nuevo'}. Revisá los datos y guardalo desde el formulario.`,
+            confirmacion: { etiqueta: 'Abrir formulario', hacer: () => openNewEvent(fecha) },
+          };
+        }
+        if (/\b(registrar|anotar|cargar) (un )?pago\b/.test(q)) {
+          const coincidencias = buscarEvento(q);
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios eventos posibles. Incluí el nombre del evento o del cliente para identificar uno solo.' : 'Decime el nombre del evento o del cliente para abrir el registro de pago.' };
+          }
+          const evento = coincidencias[0];
+          return {
+            texto: `Abriré el registro de pago de "${evento.title}" (${evento.clientName}). Vas a revisar el monto, medio y concepto antes de guardarlo.`,
+            confirmacion: { etiqueta: 'Continuar', hacer: () => openPayment(evento) },
+          };
+        }
+        if (q.includes('ver pagos de') || q.includes('historial de pagos')) {
+          const coincidencias = buscarEvento(q);
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios eventos posibles. Indicá el nombre completo del evento o del cliente.' : 'Decime el nombre del evento o del cliente para abrir su historial de pagos.' };
+          }
+          const evento = coincidencias[0];
+          return {
+            texto: `Abriré el comprobante y el historial de "${evento.title}". Desde allí podés revisar los pagos y solicitar una eliminación con la confirmación del sistema.`,
+            confirmacion: { etiqueta: 'Abrir historial', hacer: () => openReceipt(evento) },
+          };
+        }
+        if (q.includes('marcar evento realizado') || q.includes('marcar evento como realizado') || q.includes('completar evento')) {
+          const coincidencias = buscarEvento(q);
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios eventos posibles. Indicá el nombre completo del evento o del cliente.' : 'Decime el nombre del evento o del cliente que querés marcar como realizado.' };
+          }
+          const evento = coincidencias[0];
+          return {
+            texto: `Voy a marcar "${evento.title}" como realizado. Esta acción guardará el cambio en el sistema.`,
+            confirmacion: {
+              etiqueta: 'Marcar como realizado',
+              hacer: () => saveEvent({ ...evento, status: 'completed', updatedAt: new Date().toISOString() }),
+            },
+          };
+        }
+        if (q.includes('editar evento') || q.includes('modificar evento')) {
+          const coincidencias = buscarEvento(q);
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios eventos posibles. Usá el nombre completo del evento o del cliente.' : 'Decime el nombre del evento o del cliente que querés editar.' };
+          }
+          const evento = coincidencias[0];
+          return {
+            texto: `Voy a abrir "${evento.title}" para que revises los datos y confirmes los cambios al guardar.`,
+            confirmacion: { etiqueta: 'Editar evento', hacer: () => editEvent(evento) },
+          };
+        }
+        if (q.includes('eliminar evento') || q.includes('borrar evento')) {
+          const coincidencias = buscarEvento(q);
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios eventos posibles. Indicá el nombre completo del evento o del cliente.' : 'Decime el nombre del evento o del cliente que querés eliminar.' };
+          }
+          const evento = coincidencias[0];
+          return {
+            texto: `La eliminación de "${evento.title}" también puede borrar sus pagos y recordatorios asociados. Después de confirmar aquí, el sistema te pedirá una segunda confirmación.`,
+            confirmacion: { etiqueta: 'Continuar con eliminación', hacer: () => deleteEvent(evento) },
+          };
+        }
+        if (q.includes('nuevo gasto') || q.includes('crear gasto') || q.includes('crear un gasto') || q.includes('registrar egreso') || q.includes('registrar un egreso')) {
+          return {
+            texto: 'Abriré el formulario de egresos. Revisá el concepto, monto y categoría antes de guardar.',
+            confirmacion: { etiqueta: 'Abrir formulario', hacer: openNewExpense },
+          };
+        }
+        if (q.includes('editar gasto') || q.includes('eliminar gasto')) {
+          const coincidencias = buscarGasto(q);
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios gastos posibles. Indicá el concepto o proveedor con más detalle.' : 'Decime el concepto o proveedor del gasto.' };
+          }
+          const gasto = coincidencias[0];
+          if (q.includes('eliminar gasto')) {
+            return {
+              texto: `Voy a solicitar la eliminación del gasto "${gasto.concept}". El sistema pedirá confirmación antes de borrarlo.`,
+              confirmacion: { etiqueta: 'Continuar con eliminación', hacer: () => deleteExpense(gasto) },
+            };
+          }
+          return {
+            texto: `Abriré "${gasto.concept}" para que revises y guardes los cambios.`,
+            confirmacion: { etiqueta: 'Editar gasto', hacer: () => editExpense(gasto) },
+          };
+        }
+        if (q.includes('crear recordatorio') || q.includes('crear un recordatorio') || q.includes('nuevo recordatorio')) {
+          return {
+            texto: 'Abriré el formulario del recordatorio. Revisá sus datos antes de guardarlo.',
+            confirmacion: { etiqueta: 'Crear recordatorio', hacer: openNewReminder },
+          };
+        }
+        if (q.includes('editar recordatorio') || q.includes('modificar recordatorio')) {
+          const coincidencias = reminders.filter((r) => q.includes(normalizar(r.title)));
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios recordatorios posibles. Indicá el título completo.' : 'Decime el título completo del recordatorio que querés editar.' };
+          }
+          const recordatorio = coincidencias[0];
+          return {
+            texto: `Abriré "${recordatorio.title}" para que revises los datos y confirmes los cambios al guardarlo.`,
+            confirmacion: { etiqueta: 'Editar recordatorio', hacer: () => editReminder(recordatorio) },
+          };
+        }
+        if (q.includes('completar recordatorio') || q.includes('marcar recordatorio')) {
+          const coincidencias = reminders.filter((r) => q.includes(normalizar(r.title)));
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios recordatorios posibles. Indicá el título completo.' : 'Decime el título completo del recordatorio que querés marcar como completado.' };
+          }
+          const recordatorio = coincidencias[0];
+          return {
+            texto: `Voy a cambiar el estado del recordatorio "${recordatorio.title}".`,
+            confirmacion: { etiqueta: recordatorio.completed ? 'Reabrir recordatorio' : 'Marcar como completado', hacer: () => toggleReminder(recordatorio.id) },
+          };
+        }
+        if (q.includes('eliminar recordatorio') || q.includes('borrar recordatorio')) {
+          const coincidencias = reminders.filter((r) => {
+            const titulo = normalizar(r.title);
+            return q.includes(titulo);
+          });
+          if (coincidencias.length !== 1) {
+            return { texto: coincidencias.length > 1 ? 'Encontré varios recordatorios posibles. Indicá el título completo.' : 'No pude identificar un recordatorio por su título. Abriré la lista para que lo selecciones.' , accion: { etiqueta: 'Ver recordatorios', hacer: openReminders } };
+          }
+          const recordatorio = coincidencias[0];
+          return {
+            texto: `Voy a solicitar la eliminación del recordatorio "${recordatorio.title}". El sistema pedirá confirmación antes de borrarlo.`,
+            confirmacion: { etiqueta: 'Continuar con eliminación', hacer: () => deleteReminder(recordatorio) },
+          };
+        }
+        return null;
+      },
+    },
     {
       id: 'fecha',
       chip: '¿Está libre el sábado?',
@@ -290,7 +475,7 @@ export const AsistenteCandy: React.FC<Props> = ({ events, reminders, expenses, s
   return (
     <AsistenteChat
       temas={temas}
-      saludo="¡Hola! Soy el asistente de Golondrina. Preguntame qué eventos hay, quién debe, si una fecha está libre o cómo se hace algo."
+      saludo="¡Hola! Soy el asistente local de Golondrina. Puedo consultar eventos, saldos y gastos, y ayudarte a crear, editar o eliminar registros. Por ejemplo: «crear evento mañana», «registrar pago de Ana López», «editar evento Ana López» o «crear gasto». Antes de iniciar una acción te pediré confirmación; los datos se revisan en los formularios del sistema."
       soporteWhatsapp={SOPORTE}
       soporteMensaje={`Hola tecnoros.ar, necesito ayuda con el sistema de ${SALON}.`}
       colorBoton="bg-slate-900 hover:bg-slate-800 text-white ring-2 ring-cyan-400/60"

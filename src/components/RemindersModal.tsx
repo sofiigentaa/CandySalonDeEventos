@@ -39,6 +39,8 @@ interface RemindersModalProps {
   onToggleComplete: (reminderId: string) => void;
   onDeleteReminder: (reminderId: string) => void;
   initialEventId?: string | null;
+  initialReminder?: ReminderItem | null;
+  startNewReminder?: boolean;
   preselectedEventId?: string | null;
 }
 
@@ -109,6 +111,8 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
   onToggleComplete,
   onDeleteReminder,
   initialEventId,
+  initialReminder,
+  startNewReminder,
   preselectedEventId,
 }) => {
   const effectiveEventId = initialEventId || preselectedEventId;
@@ -318,6 +322,15 @@ export const RemindersModal: React.FC<RemindersModalProps> = ({
     setNotes(reminder.notes || '');
     handleOpenCreateForm();
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (initialReminder) {
+      handleStartEdit(initialReminder);
+    } else if (startNewReminder) {
+      handleOpenCreateForm();
+    }
+  }, [isOpen, initialReminder, startNewReminder]);
 
   // Filtered Reminders
   const filteredReminders = reminders

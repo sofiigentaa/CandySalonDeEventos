@@ -62,6 +62,11 @@ Al entrar se ve solo la G de Golondrina:
 
 - El asistente también está en la pantalla de la G. Si una respuesta lleva a una
   pantalla del sistema (vender, cargar un evento, la caja…), abre el sistema ahí.
+- El asistente local también permite pedir acciones sobre eventos, pagos, egresos
+  y recordatorios. Presenta una propuesta y requiere confirmación antes de abrir
+  formularios o realizar cambios; los datos se revisan y guardan en la aplicación.
+- No usa un servicio de IA externo: interpreta comandos definidos en el navegador
+  y utiliza los datos de la cuenta que ya están cargados en el sistema.
 - Aprende rápido: con **2 veces** que se repita algo (mismo ingreso de mercadería,
   mismo gasto del mes) ya lo propone. Las tareas por reglas (vencimientos, stock
   mínimo, saldos, fiados) funcionan desde el primer día, con los datos que ya hay.

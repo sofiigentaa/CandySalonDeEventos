@@ -12,6 +12,7 @@ export interface Respuesta {
   lineas?: string[];
   // enLugar: la acción no necesita abrir el sistema completo (p. ej. soporte o Golondrina)
   accion?: { etiqueta: string; hacer: () => void; enLugar?: boolean };
+  confirmacion?: { etiqueta: string; hacer: () => void; enLugar?: boolean };
 }
 
 export interface Tema {
@@ -118,6 +119,8 @@ export const AsistenteChat: React.FC<Props> = ({
   const recRef = useRef<Reconocedor | null>(null);
   const [hayVoz] = useState(() => typeof window !== 'undefined' && crearReconocedor() !== null);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
+  const [confirmaciones, setConfirmaciones] = useState<Record<number, 'confirmada' | 'cancelada'>>({});
+  const accionesConfirmadas = useRef(new Set<number>());
   const finRef = useRef<HTMLDivElement>(null);
   const soporte = `https://wa.me/${soporteWhatsapp}?text=${encodeURIComponent(soporteMensaje)}`;
 
@@ -253,6 +256,39 @@ export const AsistenteChat: React.FC<Props> = ({
                       >
                         {m.r.accion.etiqueta} <ArrowRight className="w-3.5 h-3.5" />
                       </button>
+                    )}
+                    {m.r.confirmacion && (
+                      <div className="flex items-center gap-2 pt-1">
+                        {confirmaciones[m.id] ? (
+                          <span className="text-xs font-semibold text-slate-500">
+                            {confirmaciones[m.id] === 'confirmada' ? 'Acción confirmada.' : 'Acción cancelada.'}
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (accionesConfirmadas.current.has(m.id)) return;
+                                accionesConfirmadas.current.add(m.id);
+                                setConfirmaciones((prev) => ({ ...prev, [m.id]: 'confirmada' }));
+                                if (!m.r.confirmacion!.enLugar) antesDeAccion?.();
+                                m.r.confirmacion!.hacer();
+                                setAbierto(false);
+                              }}
+                              className="rounded-lg bg-cyan-700 text-white text-xs font-bold px-3 py-1.5 hover:bg-cyan-800 cursor-pointer"
+                            >
+                              {m.r.confirmacion.etiqueta}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmaciones((prev) => ({ ...prev, [m.id]: 'cancelada' }))}
+                              className="rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold px-3 py-1.5 hover:bg-slate-50 cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
