@@ -7,9 +7,9 @@ import {
   loadExpensesFromStorage,
   saveExpensesToStorage,
 } from './storage.ts';
+import { supabase } from './supabase.ts';
 
-// La sesión viaja en una cookie HttpOnly del mismo sitio: no hace falta
-// manejar tokens acá. Si el servidor responde 401, se vuelve al login.
+// La sesión de Supabase aporta el token de acceso para cada llamada a la API.
 // Si un guardado falla, se avisa en pantalla (antes fallaba en silencio).
 
 type ErrorHandler = (message: string) => void;
@@ -29,13 +29,25 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T = any>(url: string, init: RequestInit = {}): Promise<T> {
+export async function apiRequest<T = any>(url: string, init: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (supabase) {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      onUnauthorized();
+      throw new ApiError(error.message, 401);
+    }
+    if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+  }
+  Object.assign(headers, init.headers || {});
+
   let res: Response;
   try {
     res = await fetch(url, {
       ...init,
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+      cache: init.cache || 'no-store',
+      headers,
     });
   } catch {
     throw new ApiError('Sin conexión con el servidor. Revisá internet y probá de nuevo.', 0);
@@ -46,7 +58,7 @@ async function request<T = any>(url: string, init: RequestInit = {}): Promise<T>
   } catch {
     data = null;
   }
-  if (res.status === 401 && !url.startsWith('/api/auth/')) {
+  if (res.status === 401) {
     onUnauthorized();
     throw new ApiError('Tu sesión venció. Volvé a iniciar sesión.', 401);
   }
@@ -59,7 +71,7 @@ async function request<T = any>(url: string, init: RequestInit = {}): Promise<T>
 // Para guardados: si falla, avisa en pantalla y devuelve null.
 async function mutate<T = any>(url: string, init: RequestInit): Promise<T | null> {
   try {
-    return await request<T>(url, init);
+    return await apiRequest<T>(url, init);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'No se pudo guardar.';
     if (!(err instanceof ApiError && err.status === 401)) onApiError(message);
@@ -70,7 +82,7 @@ async function mutate<T = any>(url: string, init: RequestInit): Promise<T | null
 // Para lecturas: si no hay conexión, usa la copia guardada en el navegador.
 async function readList<T>(url: string, fromCache: () => T[], toCache: (items: T[]) => void): Promise<T[]> {
   try {
-    const data = await request<T[]>(url);
+    const data = await apiRequest<T[]>(url);
     if (Array.isArray(data)) {
       toCache(data);
       return data;
@@ -82,36 +94,6 @@ async function readList<T>(url: string, fromCache: () => T[], toCache: (items: T
       return fromCache();
     }
     throw err;
-  }
-}
-
-// --- Sesión -----------------------------------------------------------------
-
-export async function getSession(): Promise<{ authenticated: boolean; email?: string }> {
-  try {
-    return await request('/api/auth/me');
-  } catch {
-    return { authenticated: false };
-  }
-}
-
-export async function login(email: string, password: string): Promise<{ ok: boolean; error?: string; email?: string }> {
-  try {
-    const data = await request<{ email: string }>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    return { ok: true, email: data.email };
-  } catch (err) {
-    return { ok: false, error: (err as Error).message };
-  }
-}
-
-export async function logout(): Promise<void> {
-  try {
-    await request('/api/auth/logout', { method: 'POST' });
-  } catch {
-    // nada
   }
 }
 

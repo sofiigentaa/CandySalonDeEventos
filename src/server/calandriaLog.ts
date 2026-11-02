@@ -10,7 +10,16 @@ import { ValidationError } from './validation.ts';
 // - En la base, la tabla no deja modificar ni borrar líneas (triggers), y
 //   "Vaciar todo" / "Restablecer demo" no la tocan.
 
-let memoryLog: LogEntry[] = [];
+const memoryLogs = new Map<string, LogEntry[]>();
+
+function getMemoryLog(userId: string): LogEntry[] {
+  let log = memoryLogs.get(userId);
+  if (!log) {
+    log = [];
+    memoryLogs.set(userId, log);
+  }
+  return log;
+}
 
 export async function ensureCalandriaTable(): Promise<void> {
   if (!isDatabaseConfigured) return;
@@ -26,6 +35,18 @@ export async function ensureCalandriaTable(): Promise<void> {
       prev_hash TEXT NOT NULL,
       hash TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS calandria_user_log (
+      user_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      at TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      action TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0,
+      minutes INTEGER NOT NULL DEFAULT 0,
+      prev_hash TEXT NOT NULL,
+      hash TEXT NOT NULL,
+      PRIMARY KEY (user_id, seq)
+    );
     CREATE OR REPLACE FUNCTION calandria_log_no_changes() RETURNS TRIGGER LANGUAGE plpgsql AS $$
     BEGIN
       RAISE EXCEPTION 'El registro de Golondrina no se puede modificar ni borrar';
@@ -37,17 +58,31 @@ export async function ensureCalandriaTable(): Promise<void> {
     DROP TRIGGER IF EXISTS calandria_log_no_truncate ON calandria_log;
     CREATE TRIGGER calandria_log_no_truncate BEFORE TRUNCATE ON calandria_log
       FOR EACH STATEMENT EXECUTE FUNCTION calandria_log_no_changes();
+    CREATE OR REPLACE FUNCTION calandria_user_log_no_changes() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    BEGIN
+      RAISE EXCEPTION 'El registro de Golondrina no se puede modificar ni borrar';
+    END;
+    $$;
+    DROP TRIGGER IF EXISTS calandria_user_log_no_update ON calandria_user_log;
+    CREATE TRIGGER calandria_user_log_no_update BEFORE UPDATE OR DELETE ON calandria_user_log
+      FOR EACH ROW EXECUTE FUNCTION calandria_user_log_no_changes();
+    DROP TRIGGER IF EXISTS calandria_user_log_no_truncate ON calandria_user_log;
+    CREATE TRIGGER calandria_user_log_no_truncate BEFORE TRUNCATE ON calandria_user_log
+      FOR EACH STATEMENT EXECUTE FUNCTION calandria_user_log_no_changes();
     -- En Supabase: que la API pública (clave anon) no pueda ni leerla.
     ALTER TABLE calandria_log ENABLE ROW LEVEL SECURITY;
     DO $$
     BEGIN
       IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
         EXECUTE 'REVOKE ALL ON calandria_log FROM anon';
+        EXECUTE 'REVOKE ALL ON calandria_user_log FROM anon';
       END IF;
       IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
         EXECUTE 'REVOKE ALL ON calandria_log FROM authenticated';
+        EXECUTE 'REVOKE ALL ON calandria_user_log FROM authenticated';
       END IF;
     END $$;
+    ALTER TABLE calandria_user_log ENABLE ROW LEVEL SECURITY;
   `);
 }
 
@@ -63,31 +98,36 @@ export function validateLogInput(body: any): { kind: CalandriaKind; action: Cala
   return { kind, action, qty, minutes };
 }
 
-export async function getCalandriaLog(): Promise<LogEntry[]> {
-  if (!isDatabaseConfigured) return memoryLog;
+export async function getCalandriaLog(userId: string): Promise<LogEntry[]> {
+  if (!isDatabaseConfigured) return getMemoryLog(userId);
   const { rows } = await createPool().query(
-    'SELECT seq, at, kind, action, qty, minutes, prev_hash, hash FROM calandria_log ORDER BY seq ASC LIMIT 20000'
+    'SELECT seq, at, kind, action, qty, minutes, prev_hash, hash FROM calandria_user_log WHERE user_id = $1 ORDER BY seq ASC LIMIT 20000',
+    [userId]
   );
   return rows as LogEntry[];
 }
 
-export async function appendCalandriaLog(input: ReturnType<typeof validateLogInput>): Promise<LogEntry> {
+export async function appendCalandriaLog(input: ReturnType<typeof validateLogInput>, userId: string): Promise<LogEntry> {
   const data = { ...input, at: new Date().toISOString() };
   if (!isDatabaseConfigured) {
-    const entry = sealEntry(memoryLog[memoryLog.length - 1], data);
-    memoryLog = [...memoryLog, entry];
+    const userLog = getMemoryLog(userId);
+    const entry = sealEntry(userLog[userLog.length - 1], data);
+    memoryLogs.set(userId, [...userLog, entry]);
     return entry;
   }
   const client = await createPool().connect();
   try {
     await client.query('BEGIN');
     // Una línea a la vez: la cadena no se bifurca aunque lleguen dos juntas.
-    await client.query("SELECT pg_advisory_xact_lock(hashtext('calandria_log'))");
-    const { rows } = await client.query('SELECT seq, at, kind, action, qty, minutes, prev_hash, hash FROM calandria_log ORDER BY seq DESC LIMIT 1');
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('calandria_user_log:' || $1))", [userId]);
+    const { rows } = await client.query(
+      'SELECT seq, at, kind, action, qty, minutes, prev_hash, hash FROM calandria_user_log WHERE user_id = $1 ORDER BY seq DESC LIMIT 1',
+      [userId]
+    );
     const entry = sealEntry(rows[0] as LogEntry | undefined, data);
     await client.query(
-      'INSERT INTO calandria_log (seq, at, kind, action, qty, minutes, prev_hash, hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [entry.seq, entry.at, entry.kind, entry.action, entry.qty, entry.minutes, entry.prev_hash, entry.hash]
+      'INSERT INTO calandria_user_log (user_id, seq, at, kind, action, qty, minutes, prev_hash, hash) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [userId, entry.seq, entry.at, entry.kind, entry.action, entry.qty, entry.minutes, entry.prev_hash, entry.hash]
     );
     await client.query('COMMIT');
     return entry;

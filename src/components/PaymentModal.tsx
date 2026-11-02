@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { EventItem, PaymentConcept, PaymentMethod, PaymentRecord } from '../types';
 import {
   formatCurrency,
@@ -46,6 +46,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [method, setMethod] = useState<PaymentMethod>('Transferencia');
   const [concept, setConcept] = useState<string>('Abono parcial');
   const [notes, setNotes] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setAmount('');
+    setDate(getTodayString());
+    setMethod('Transferencia');
+    setConcept('Abono parcial');
+    setNotes('');
+  }, [isOpen, event?.id]);
 
   if (!isOpen || !event) return null;
 

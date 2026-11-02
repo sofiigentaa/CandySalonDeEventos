@@ -24,11 +24,11 @@ if (typeof window !== 'undefined') {
 
 // Sin sesión iniciada no se muestra nada del salón.
 function AuthGate() {
-  const { user, loading } = useAuth();
+  const { user, loading, passwordRecovery } = useAuth();
   if (loading) {
     return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-sm text-slate-400">Cargando…</div>;
   }
-  return user ? <App /> : <LoginScreen />;
+  return user && !passwordRecovery ? <App /> : <LoginScreen />;
 }
 
 createRoot(document.getElementById('root')!).render(

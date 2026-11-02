@@ -1,10 +1,10 @@
 import { boolean, integer, jsonb, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// Users table (Firebase Auth UID)
+// Legacy account mirror; uid corresponds to the Supabase Auth user ID.
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  uid: text('uid').notNull().unique(), // Firebase Auth UID
+  uid: text('uid').notNull().unique(), // Supabase Auth user ID
   email: text('email').notNull(),
   displayName: text('display_name'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -13,7 +13,7 @@ export const users = pgTable('users', {
 // Events table for Candy Salón de Eventos
 export const events = pgTable('events', {
   id: text('id').primaryKey(),
-  userId: text('user_id'), // Optional: tied to auth user uid
+  userId: text('user_id'), // Supabase Auth user ID; null only for unassigned legacy records
   title: text('title').notNull(),
   clientName: text('client_name').notNull(),
   clientPhone: text('client_phone'),

@@ -1,34 +1,56 @@
-# Cómo publicar Candy en Render con Supabase
+# Candy: PostgreSQL local y Supabase Auth
 
-## 1. Supabase (base de datos)
-1. Crear un proyecto en https://supabase.com (región São Paulo).
-2. **SQL Editor → New query**: pegar el contenido de `supabase/schema.sql` y tocar **Run**.
-   Crea las tablas y activa la seguridad (RLS) para que nadie lea los datos desde afuera.
-3. **Connect → Session pooler**: copiar la cadena de conexión y reemplazar `[YOUR-PASSWORD]`
-   por la contraseña de la base. Usar el *pooler*, no la "Direct connection" (Render no siempre la alcanza).
+## Desarrollo local en Ubuntu
 
-## 2. Render (servidor)
-1. **New → Blueprint** → elegir este repositorio. Render lee `render.yaml`.
-2. Completar las variables que pide:
-   - `DATABASE_URL`: la cadena del paso 1.3.
-   - `SALON_PASSWORD`: la contraseña para entrar (mínimo 12 caracteres).
-   - `SALON_EMAILS`: emails que pueden entrar, separados por coma.
-   - `GEMINI_API_KEY`: opcional, para los contratos con IA.
-   - `SESSION_SECRET` se genera sola.
-3. **Apply**. Cuando termine, entrar a la URL de Render e iniciar sesión.
+Supabase se usa solo para registro, inicio de sesión, verificación de correo y recuperación de contraseña. Los datos del salón se guardan en PostgreSQL local; no hace falta crear ni habilitar una base de datos en Supabase.
 
-## Demo pública
-Para una demo con datos de ejemplo: `SEED_DEMO=true` y `ALLOW_DEMO_RESET=true`.
-En el sistema de un cliente real dejar las dos en `false`.
+PostgreSQL debe estar instalado. Si no tenés permisos de administrador para crear bases en el cluster del sistema, inicializá un cluster privado bajo tu usuario. En Ubuntu:
 
-## Desarrollo local
 ```bash
-npm install
-npm run dev        # sin DATABASE_URL: modo demo en memoria; entrar con cualquier email y la clave "candy-demo"
+PG_BIN="$(pg_config --bindir)"
+PG_ROOT="$HOME/.local/share/postgresql/candy-salon"
+mkdir -p "$PG_ROOT/socket"
+chmod 700 "$PG_ROOT" "$PG_ROOT/socket"
+"$PG_BIN/initdb" -D "$PG_ROOT/data" -U "$USER" --no-locale --encoding=UTF8 --auth-local=peer --auth-host=scram-sha-256
+"$PG_BIN/pg_ctl" -D "$PG_ROOT/data" -l "$PG_ROOT/postgres.log" -o "-h 127.0.0.1 -p 55432 -c unix_socket_directories=$PG_ROOT/socket" start
+"$PG_BIN/psql" -h "$PG_ROOT/socket" -p 55432 -U "$USER" -d postgres -v ON_ERROR_STOP=1 \
+  -c "CREATE ROLE candy_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE" \
+  -c "CREATE DATABASE candy_salon_eventos OWNER candy_app"
+printf 'candy_app %s candy_app\n' "$USER" >> "$PG_ROOT/data/pg_ident.conf"
+sed -i '/^local[[:space:]]\+all[[:space:]]\+all[[:space:]]\+peer/i local all candy_app peer map=candy_app' "$PG_ROOT/data/pg_hba.conf"
+"$PG_BIN/pg_ctl" -D "$PG_ROOT/data" reload
 ```
+
+El cluster escucha solo en la propia computadora. La aplicación usa el rol sin privilegios `candy_app` y se conecta por un socket protegido con permisos del usuario y autenticación *peer*; no guarda una contraseña de PostgreSQL. Si el directorio `data` ya existe, no repitas la inicialización.
+
+Copiar `.env.example` a `.env`; reemplazar `tu-usuario` en `SQL_HOST` por el resultado de `whoami`. Mantener `SQL_USER=candy_app`, `SQL_DB_NAME=candy_salon_eventos`, `SQL_PORT=55432` y `DB_SSL=false`. Completar solamente `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` con la URL del proyecto Supabase y su clave pública `anon`/`publishable`.
+
+En Supabase:
+
+1. Habilitar confirmación de email en **Authentication → Providers → Email**.
+2. En **Authentication → URL Configuration**, agregar `http://localhost:3005` a **Redirect URLs**.
+3. Configurar un proveedor SMTP si se necesitan correos de producción; el servicio predeterminado tiene límites para desarrollo.
+
+Al iniciar, la aplicación crea las tablas PostgreSQL, índices y restricciones necesarias. Iniciar PostgreSQL antes de la aplicación:
+
+```bash
+PG_BIN="$(pg_config --bindir)"
+PG_ROOT="$HOME/.local/share/postgresql/candy-salon"
+if ! "$PG_BIN/pg_ctl" -D "$PG_ROOT/data" status >/dev/null 2>&1; then
+  "$PG_BIN/pg_ctl" -D "$PG_ROOT/data" -l "$PG_ROOT/postgres.log" -o "-h 127.0.0.1 -p 55432 -c unix_socket_directories=$PG_ROOT/socket" start
+fi
+npm install
+npm run dev
+```
+
+No usar una URL `pooler.supabase.com` para esta configuración local. No configurar `service_role` en el cliente.
+
+## Despliegue en Render
+
+El PostgreSQL local de una computadora no es accesible desde Render. Para desplegar el servidor se necesita una instancia PostgreSQL accesible desde Render y establecer `DATABASE_URL` en Render. Supabase Auth sigue usando `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`. Agregar la URL pública del sitio a las **Redirect URLs** de Supabase.
+
+Las cuentas nuevas tienen datos aislados. Los registros antiguos sin propietario no se asignan automáticamente; revisar y asignar esos registros a la cuenta correspondiente antes de migrar una base previa.
 
 ## Golondrina
 
-El servidor crea solo la tabla del historial (`calandria_log`) al arrancar.
-Si el salón ya estaba andando, conviene volver a correr `supabase/schema.sql` para
-dejarla también cerrada a la API pública. Cómo funciona: ver `GOLONDRINA.md`.
+El servidor crea las tablas del historial al arrancar. Para conocer su funcionamiento, ver [GOLONDRINA.md](./GOLONDRINA.md).

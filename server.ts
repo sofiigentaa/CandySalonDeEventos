@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import {
@@ -12,15 +13,15 @@ import {
   getAllExpensesFromDb,
   saveExpenseToDb,
   deleteExpenseFromDb,
-  seedInitialDataIfEmpty,
   clearAllFromDb,
   loadDemoData,
   ensureTablesExist,
   isMemoryMode,
+  OwnershipConflictError,
 } from './src/db/eventsService.ts';
 import { appendCalandriaLog, ensureCalandriaTable, getCalandriaLog, validateLogInput } from './src/server/calandriaLog.ts';
 import { generateContractWithGemini, chatWithContractAssistant } from './src/utils/aiContractService.ts';
-import { assertProductionSecrets, isProduction, registerAuthRoutes, requireSession } from './src/server/session.ts';
+import { assertSupabaseConfig, isProduction, requireSession } from './src/server/session.ts';
 import {
   ValidationError,
   findBookingConflict,
@@ -34,6 +35,9 @@ import {
 // Respuesta de error: el detalle técnico queda en el log del servidor, nunca
 // llega al navegador en producción.
 function sendError(res: express.Response, error: unknown, fallback: string) {
+  if (error instanceof OwnershipConflictError) {
+    return res.status(409).json({ error: error.message });
+  }
   if (error instanceof ValidationError) {
     return res.status(400).json({ error: error.message });
   }
@@ -47,10 +51,13 @@ function sendError(res: express.Response, error: unknown, fallback: string) {
 const demoToolsEnabled = () => !isProduction() || process.env.ALLOW_DEMO_RESET === 'true';
 
 async function startServer() {
-  assertProductionSecrets();
+  assertSupabaseConfig();
+  if (isProduction() && isMemoryMode()) {
+    throw new Error('Configurá DATABASE_URL para usar PostgreSQL en producción.');
+  }
 
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = Number(process.env.PORT) || 3005;
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
@@ -61,36 +68,37 @@ async function startServer() {
     if (isProduction()) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   });
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
 
   // Tablas y (si se pidió) datos de ejemplo. Si la base no responde, el
   // servidor no arranca: es mejor que Render muestre el error a que la app
   // "funcione" sin guardar nada.
   await ensureTablesExist();
   await ensureCalandriaTable();
-  await seedInitialDataIfEmpty();
   console.log(isMemoryMode() ? 'Modo demo: datos en memoria (sin base de datos).' : 'Base de datos PostgreSQL conectada.');
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString(), database: isMemoryMode() ? 'memory' : 'postgres', demoTools: demoToolsEnabled() });
   });
 
-  registerAuthRoutes(app);
-
   // Todo lo que sigue exige sesión iniciada.
   app.use('/api', requireSession);
 
-  app.get('/api/events', async (_req, res) => {
+  app.get('/api/events', async (req, res) => {
     try {
-      res.json(await getAllEventsFromDb());
+      res.json(await getAllEventsFromDb(req.user!.id));
     } catch (error) {
       sendError(res, error, 'No se pudieron leer los eventos.');
     }
   });
 
-  app.post('/api/events', async (req: any, res) => {
+  app.post('/api/events', async (req, res) => {
     try {
       const event = validateEvent(req.body);
-      const all = await getAllEventsFromDb();
+      const all = await getAllEventsFromDb(req.user!.id);
       const conflict = findBookingConflict(all, event);
       if (conflict) {
         return res.status(409).json({
@@ -98,7 +106,7 @@ async function startServer() {
           conflictId: conflict.id,
         });
       }
-      const saved = await saveEventToDb(event, req.user?.uid);
+      const saved = await saveEventToDb(event, req.user!.id);
       res.json({ success: true, event: saved });
     } catch (error) {
       sendError(res, error, 'No se pudo guardar el evento.');
@@ -107,7 +115,7 @@ async function startServer() {
 
   app.delete('/api/events/:id', async (req, res) => {
     try {
-      await deleteEventFromDb(req.params.id);
+      await deleteEventFromDb(req.params.id, req.user!.id);
       res.json({ success: true, deletedId: req.params.id });
     } catch (error) {
       sendError(res, error, 'No se pudo borrar el evento.');
@@ -117,28 +125,31 @@ async function startServer() {
   app.post('/api/events/:id/payments', async (req, res) => {
     try {
       const payment = validatePayment(req.body);
-      const ev = await getEventById(req.params.id);
+      const ev = await getEventById(req.params.id, req.user!.id);
       if (!ev) return res.status(404).json({ error: 'El evento no existe.' });
       validatePaymentForEvent(ev, payment);
-      const saved = await addPaymentToDb(req.params.id, payment);
+      const saved = await addPaymentToDb(req.params.id, payment, req.user!.id);
       res.json({ success: true, event: saved, payment: saved?.paymentHistory?.find((p) => p.id === payment.id) });
     } catch (error) {
       sendError(res, error, 'No se pudo registrar el pago.');
     }
   });
 
-  app.get('/api/reminders', async (_req, res) => {
+  app.get('/api/reminders', async (req, res) => {
     try {
-      res.json(await getAllRemindersFromDb());
+      res.json(await getAllRemindersFromDb(req.user!.id));
     } catch (error) {
       sendError(res, error, 'No se pudieron leer los recordatorios.');
     }
   });
 
-  app.post('/api/reminders', async (req: any, res) => {
+  app.post('/api/reminders', async (req, res) => {
     try {
       const reminder = validateReminder(req.body);
-      await saveReminderToDb(reminder, req.user?.uid);
+      if (reminder.eventId && !(await getEventById(reminder.eventId, req.user!.id))) {
+        return res.status(404).json({ error: 'El evento relacionado no existe.' });
+      }
+      await saveReminderToDb(reminder, req.user!.id);
       res.json({ success: true, reminder });
     } catch (error) {
       sendError(res, error, 'No se pudo guardar el recordatorio.');
@@ -147,25 +158,28 @@ async function startServer() {
 
   app.delete('/api/reminders/:id', async (req, res) => {
     try {
-      await deleteReminderFromDb(req.params.id);
+      await deleteReminderFromDb(req.params.id, req.user!.id);
       res.json({ success: true, deletedId: req.params.id });
     } catch (error) {
       sendError(res, error, 'No se pudo borrar el recordatorio.');
     }
   });
 
-  app.get('/api/expenses', async (_req, res) => {
+  app.get('/api/expenses', async (req, res) => {
     try {
-      res.json(await getAllExpensesFromDb());
+      res.json(await getAllExpensesFromDb(req.user!.id));
     } catch (error) {
       sendError(res, error, 'No se pudieron leer los egresos.');
     }
   });
 
-  app.post('/api/expenses', async (req: any, res) => {
+  app.post('/api/expenses', async (req, res) => {
     try {
       const expense = validateExpense(req.body);
-      await saveExpenseToDb(expense, req.user?.uid);
+      if (expense.eventId && !(await getEventById(expense.eventId, req.user!.id))) {
+        return res.status(404).json({ error: 'El evento relacionado no existe.' });
+      }
+      await saveExpenseToDb(expense, req.user!.id);
       res.json({ success: true, expense });
     } catch (error) {
       sendError(res, error, 'No se pudo guardar el egreso.');
@@ -174,7 +188,7 @@ async function startServer() {
 
   app.delete('/api/expenses/:id', async (req, res) => {
     try {
-      await deleteExpenseFromDb(req.params.id);
+      await deleteExpenseFromDb(req.params.id, req.user!.id);
       res.json({ success: true, deletedId: req.params.id });
     } catch (error) {
       sendError(res, error, 'No se pudo borrar el egreso.');
@@ -182,9 +196,9 @@ async function startServer() {
   });
 
   // Golondrina: registro sellado (solo se agrega; nunca se modifica ni se borra).
-  app.get('/api/calandria/log', async (_req, res) => {
+  app.get('/api/calandria/log', async (req, res) => {
     try {
-      res.json(await getCalandriaLog());
+      res.json(await getCalandriaLog(req.user!.id));
     } catch (error) {
       sendError(res, error, 'No se pudo leer el registro de Golondrina.');
     }
@@ -192,7 +206,7 @@ async function startServer() {
 
   app.post('/api/calandria/log', async (req, res) => {
     try {
-      res.json({ success: true, entry: await appendCalandriaLog(validateLogInput(req.body)) });
+      res.json({ success: true, entry: await appendCalandriaLog(validateLogInput(req.body), req.user!.id) });
     } catch (error) {
       sendError(res, error, 'No se pudo registrar la acción de Golondrina.');
     }
@@ -227,25 +241,25 @@ async function startServer() {
     }
   });
 
-  app.post('/api/clear-all', async (_req, res) => {
+  app.post('/api/clear-all', async (req, res) => {
     if (!demoToolsEnabled()) return res.status(403).json({ error: 'Función deshabilitada en este sistema.' });
     try {
-      await clearAllFromDb();
+      await clearAllFromDb(req.user!.id);
       res.json({ success: true, events: [], reminders: [], expenses: [] });
     } catch (error) {
       sendError(res, error, 'No se pudo vaciar la base.');
     }
   });
 
-  app.post('/api/reset-demo', async (_req, res) => {
+  app.post('/api/reset-demo', async (req, res) => {
     if (!demoToolsEnabled()) return res.status(403).json({ error: 'Función deshabilitada en este sistema.' });
     try {
-      await loadDemoData();
+      await loadDemoData(req.user!.id);
       res.json({
         success: true,
-        events: await getAllEventsFromDb(),
-        reminders: await getAllRemindersFromDb(),
-        expenses: await getAllExpensesFromDb(),
+        events: await getAllEventsFromDb(req.user!.id),
+        reminders: await getAllRemindersFromDb(req.user!.id),
+        expenses: await getAllExpensesFromDb(req.user!.id),
       });
     } catch (error) {
       sendError(res, error, 'No se pudieron restablecer los datos de ejemplo.');

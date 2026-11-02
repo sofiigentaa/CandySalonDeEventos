@@ -2,6 +2,15 @@ import { EventItem, ReminderItem, ExpenseItem } from '../types';
 
 const STORAGE_KEY = 'gestor_eventos_candy_data_v2';
 const REMINDERS_STORAGE_KEY = 'gestor_eventos_candy_reminders_v1';
+let storageUserId: string | null = null;
+
+export function setStorageUserId(userId: string | null): void {
+  storageUserId = userId;
+}
+
+export function getUserScopedStorageKey(key: string): string | null {
+  return storageUserId ? `${key}:${storageUserId}` : null;
+}
 
 // Las fechas de ejemplo se corren para que siempre queden cerca de hoy
 // (las originales eran de agosto-octubre 2026 y ya habían pasado).
@@ -410,88 +419,85 @@ export const INITIAL_EXPENSES: ExpenseItem[] = [
 ];
 
 export function loadEventsFromStorage(): EventItem[] {
+  const key = getUserScopedStorageKey(STORAGE_KEY);
+  if (!key) return [];
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (!data) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_EVENTS));
-      return INITIAL_EVENTS;
-    }
+    const data = localStorage.getItem(key);
+    if (!data) return [];
     const parsed = JSON.parse(data);
-    if (!Array.isArray(parsed)) {
-      return INITIAL_EVENTS;
-    }
-    // Clean up any legacy sub-locations
-    const sanitized = parsed.map((event: EventItem) => {
-      if (event.location && event.location.toLowerCase().includes('candy')) {
-        return { ...event, location: 'Candy Salón de Eventos' };
-      }
-      return event;
-    });
-    return sanitized;
+    if (!Array.isArray(parsed)) return [];
+    return parsed;
   } catch (error) {
     console.error('Error loading events from storage:', error);
-    return INITIAL_EVENTS;
+    return [];
   }
 }
 
 export function saveEventsToStorage(events: EventItem[]): void {
+  const key = getUserScopedStorageKey(STORAGE_KEY);
+  if (!key) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    localStorage.setItem(key, JSON.stringify(events));
   } catch (error) {
     console.error('Error saving events to storage:', error);
   }
 }
 
 export function loadRemindersFromStorage(): ReminderItem[] {
+  const key = getUserScopedStorageKey(REMINDERS_STORAGE_KEY);
+  if (!key) return [];
   try {
-    const data = localStorage.getItem(REMINDERS_STORAGE_KEY);
-    if (!data) {
-      localStorage.setItem(REMINDERS_STORAGE_KEY, JSON.stringify(INITIAL_REMINDERS));
-      return INITIAL_REMINDERS;
-    }
+    const data = localStorage.getItem(key);
+    if (!data) return [];
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) ? parsed : INITIAL_REMINDERS;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     console.error('Error loading reminders from storage:', error);
-    return INITIAL_REMINDERS;
+    return [];
   }
 }
 
 export function saveRemindersToStorage(reminders: ReminderItem[]): void {
+  const key = getUserScopedStorageKey(REMINDERS_STORAGE_KEY);
+  if (!key) return;
   try {
-    localStorage.setItem(REMINDERS_STORAGE_KEY, JSON.stringify(reminders));
+    localStorage.setItem(key, JSON.stringify(reminders));
   } catch (error) {
     console.error('Error saving reminders to storage:', error);
   }
 }
 
 export function loadExpensesFromStorage(): ExpenseItem[] {
+  const key = getUserScopedStorageKey(EXPENSES_STORAGE_KEY);
+  if (!key) return [];
   try {
-    const data = localStorage.getItem(EXPENSES_STORAGE_KEY);
-    if (!data) {
-      localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(INITIAL_EXPENSES));
-      return INITIAL_EXPENSES;
-    }
+    const data = localStorage.getItem(key);
+    if (!data) return [];
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) ? parsed : INITIAL_EXPENSES;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     console.error('Error loading expenses from storage:', error);
-    return INITIAL_EXPENSES;
+    return [];
   }
 }
 
 export function saveExpensesToStorage(expenses: ExpenseItem[]): void {
+  const key = getUserScopedStorageKey(EXPENSES_STORAGE_KEY);
+  if (!key) return;
   try {
-    localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(expenses));
+    localStorage.setItem(key, JSON.stringify(expenses));
   } catch (error) {
     console.error('Error saving expenses to storage:', error);
   }
 }
 
 export function resetToDemoData(): { events: EventItem[]; reminders: ReminderItem[]; expenses: ExpenseItem[] } {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_EVENTS));
-  localStorage.setItem(REMINDERS_STORAGE_KEY, JSON.stringify(INITIAL_REMINDERS));
-  localStorage.setItem(EXPENSES_STORAGE_KEY, JSON.stringify(INITIAL_EXPENSES));
+  const eventKey = getUserScopedStorageKey(STORAGE_KEY);
+  const reminderKey = getUserScopedStorageKey(REMINDERS_STORAGE_KEY);
+  const expenseKey = getUserScopedStorageKey(EXPENSES_STORAGE_KEY);
+  if (!eventKey || !reminderKey || !expenseKey) return { events: [], reminders: [], expenses: [] };
+  localStorage.setItem(eventKey, JSON.stringify(INITIAL_EVENTS));
+  localStorage.setItem(reminderKey, JSON.stringify(INITIAL_REMINDERS));
+  localStorage.setItem(expenseKey, JSON.stringify(INITIAL_EXPENSES));
   return { events: INITIAL_EVENTS, reminders: INITIAL_REMINDERS, expenses: INITIAL_EXPENSES };
 }
-

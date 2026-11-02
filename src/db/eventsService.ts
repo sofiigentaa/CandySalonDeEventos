@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc, inArray } from 'drizzle-orm';
 import { db, createPool, isDatabaseConfigured } from './index.ts';
 import { events, payments, reminders, users, expenses } from './schema.ts';
 import { EventItem, PaymentRecord, ReminderItem, ExpenseItem } from '../types.ts';
@@ -12,9 +12,24 @@ import { getTotalPaid } from '../utils/dateUtils.ts';
 // - Sin base (desarrollo o demo local): todo vive en memoria.
 const MEMORY_MODE = !isDatabaseConfigured;
 
-let memoryEvents: EventItem[] = structuredClone(INITIAL_EVENTS);
-let memoryReminders: ReminderItem[] = structuredClone(INITIAL_REMINDERS);
-let memoryExpenses: ExpenseItem[] = structuredClone(INITIAL_EXPENSES);
+const memoryEvents = new Map<string, EventItem[]>();
+const memoryReminders = new Map<string, ReminderItem[]>();
+const memoryExpenses = new Map<string, ExpenseItem[]>();
+
+function memoryItems<T>(store: Map<string, T[]>, userId: string): T[] {
+  let items = store.get(userId);
+  if (!items) {
+    items = [];
+    store.set(userId, items);
+  }
+  return items;
+}
+
+export class OwnershipConflictError extends Error {
+  constructor() {
+    super('El identificador ya pertenece a otro usuario.');
+  }
+}
 
 let tablesReadyPromise: Promise<void> | null = null;
 
@@ -99,6 +114,24 @@ export async function ensureTablesExist(): Promise<void> {
       );
       ALTER TABLE events ADD COLUMN IF NOT EXISTS contracted_services JSONB;
       CREATE SEQUENCE IF NOT EXISTS receipt_number_seq START 1;
+      CREATE INDEX IF NOT EXISTS events_user_id_idx ON events(user_id);
+      CREATE INDEX IF NOT EXISTS payments_event_id_idx ON payments(event_id);
+      CREATE INDEX IF NOT EXISTS reminders_user_id_idx ON reminders(user_id);
+      CREATE INDEX IF NOT EXISTS expenses_user_id_idx ON expenses(user_id);
+      ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE reminders ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+          REVOKE ALL ON users, events, payments, reminders, expenses FROM anon;
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+          REVOKE ALL ON users, events, payments, reminders, expenses FROM authenticated;
+        END IF;
+      END $$;
     `);
   })().catch((error) => {
     tablesReadyPromise = null;
@@ -158,11 +191,12 @@ function computeStatus(ev: Pick<EventItem, 'status' | 'totalAmount'>, totalPaid:
   return 'no_deposit';
 }
 
-export async function getAllEventsFromDb(): Promise<EventItem[]> {
-  if (MEMORY_MODE) return memoryEvents;
+export async function getAllEventsFromDb(userId: string): Promise<EventItem[]> {
+  if (MEMORY_MODE) return memoryItems(memoryEvents, userId);
   await ensureTablesExist();
-  const allEvents = await db.select().from(events).orderBy(desc(events.eventDate));
-  const allPayments = await db.select().from(payments);
+  const allEvents = await db.select().from(events).where(eq(events.userId, userId)).orderBy(desc(events.eventDate));
+  if (allEvents.length === 0) return [];
+  const allPayments = await db.select().from(payments).where(inArray(payments.eventId, allEvents.map((event) => event.id)));
 
   const paymentMap = new Map<string, PaymentRecord[]>();
   for (const p of allPayments) {
@@ -188,8 +222,8 @@ export async function getAllEventsFromDb(): Promise<EventItem[]> {
     eventType: ev.eventType as any,
     eventDate: ev.eventDate,
     eventTime: ev.eventTime || undefined,
-    location: 'Candy Salón de Eventos',
-    guestCount: ev.guestCount || undefined,
+    location: ev.location ?? '',
+    guestCount: ev.guestCount ?? undefined,
     totalAmount: ev.totalAmount,
     depositAmount: ev.depositAmount,
     paymentHistory: (paymentMap.get(ev.id) || []).sort((a, b) => a.date.localeCompare(b.date)),
@@ -201,17 +235,19 @@ export async function getAllEventsFromDb(): Promise<EventItem[]> {
   }));
 }
 
-export async function getEventById(id: string): Promise<EventItem | undefined> {
-  const all = await getAllEventsFromDb();
+export async function getEventById(id: string, userId: string): Promise<EventItem | undefined> {
+  const all = await getAllEventsFromDb(userId);
   return all.find((e) => e.id === id);
 }
 
 // Guarda el evento y deja su historial de pagos EXACTAMENTE como viene:
 // agrega los nuevos (con número de recibo correlativo) y borra los que se
 // eliminaron desde la pantalla. Devuelve el evento tal como quedó guardado.
-export async function saveEventToDb(event: EventItem, userId?: string): Promise<EventItem> {
+export async function saveEventToDb(event: EventItem, userId: string): Promise<EventItem> {
   const history: PaymentRecord[] = [];
-  const previous = MEMORY_MODE ? memoryEvents.find((e) => e.id === event.id) : await getEventById(event.id);
+  const previous = MEMORY_MODE
+    ? memoryItems(memoryEvents, userId).find((e) => e.id === event.id)
+    : await getEventById(event.id, userId);
   const previousReceipts = new Map((previous?.paymentHistory || []).map((p) => [p.id, p.receiptNumber]));
 
   for (const p of event.paymentHistory || []) {
@@ -223,16 +259,16 @@ export async function saveEventToDb(event: EventItem, userId?: string): Promise<
   const totalPaid = getTotalPaid({ ...event, paymentHistory: history });
   const saved: EventItem = {
     ...event,
-    location: 'Candy Salón de Eventos',
     paymentHistory: history,
     status: computeStatus(event, totalPaid),
     updatedAt: new Date().toISOString(),
   };
 
   if (MEMORY_MODE) {
-    const idx = memoryEvents.findIndex((e) => e.id === saved.id);
-    if (idx >= 0) memoryEvents[idx] = saved;
-    else memoryEvents.unshift(saved);
+    const userEvents = memoryItems(memoryEvents, userId);
+    const idx = userEvents.findIndex((e) => e.id === saved.id);
+    if (idx >= 0) userEvents[idx] = saved;
+    else userEvents.unshift(saved);
     return saved;
   }
 
@@ -246,8 +282,8 @@ export async function saveEventToDb(event: EventItem, userId?: string): Promise<
       eventType: saved.eventType,
       eventDate: saved.eventDate,
       eventTime: saved.eventTime || null,
-      location: 'Candy Salón de Eventos',
-      guestCount: saved.guestCount || 0,
+      location: saved.location ?? null,
+      guestCount: saved.guestCount ?? 0,
       totalAmount: saved.totalAmount,
       depositAmount: saved.depositAmount,
       status: saved.status,
@@ -255,10 +291,12 @@ export async function saveEventToDb(event: EventItem, userId?: string): Promise<
       contractedServices: saved.contractedServices && saved.contractedServices.length > 0 ? saved.contractedServices : null,
       updatedAt: new Date(),
     };
-    await tx
+    const result = await tx
       .insert(events)
-      .values({ id: saved.id, userId: userId || null, ...row })
-      .onConflictDoUpdate({ target: events.id, set: row });
+      .values({ id: saved.id, userId, ...row })
+      .onConflictDoUpdate({ target: events.id, set: { ...row, userId }, where: eq(events.userId, userId) })
+      .returning({ id: events.id });
+    if (result.length === 0) throw new OwnershipConflictError();
 
     // El historial de la base queda igual al que mandó la pantalla
     // (antes, un pago borrado reaparecía al recargar).
@@ -279,26 +317,30 @@ export async function saveEventToDb(event: EventItem, userId?: string): Promise<
   return saved;
 }
 
-export async function addPaymentToDb(eventId: string, payment: PaymentRecord): Promise<EventItem | undefined> {
-  const ev = MEMORY_MODE ? memoryEvents.find((e) => e.id === eventId) : await getEventById(eventId);
+export async function addPaymentToDb(eventId: string, payment: PaymentRecord, userId: string): Promise<EventItem | undefined> {
+  const ev = MEMORY_MODE
+    ? memoryItems(memoryEvents, userId).find((e) => e.id === eventId)
+    : await getEventById(eventId, userId);
   if (!ev) return undefined;
   const updated: EventItem = {
     ...ev,
     paymentHistory: [...(ev.paymentHistory || []), { ...payment, receiptNumber: undefined }],
   };
-  return saveEventToDb(updated);
+  return saveEventToDb(updated, userId);
 }
 
-export async function deleteEventFromDb(id: string): Promise<void> {
+export async function deleteEventFromDb(id: string, userId: string): Promise<void> {
   if (MEMORY_MODE) {
-    memoryEvents = memoryEvents.filter((e) => e.id !== id);
-    memoryReminders = memoryReminders.filter((r) => r.eventId !== id);
+    const userEvents = memoryItems(memoryEvents, userId);
+    memoryEvents.set(userId, userEvents.filter((e) => e.id !== id));
+    const userReminders = memoryItems(memoryReminders, userId);
+    memoryReminders.set(userId, userReminders.filter((r) => r.eventId !== id));
     return;
   }
   await ensureTablesExist();
   await db.transaction(async (tx) => {
-    await tx.delete(reminders).where(eq(reminders.eventId, id));
-    await tx.delete(events).where(eq(events.id, id));
+    await tx.delete(reminders).where(and(eq(reminders.eventId, id), eq(reminders.userId, userId)));
+    await tx.delete(events).where(and(eq(events.id, id), eq(events.userId, userId)));
   });
 }
 
@@ -306,10 +348,10 @@ export async function deleteEventFromDb(id: string): Promise<void> {
 // Recordatorios
 // ---------------------------------------------------------------------------
 
-export async function getAllRemindersFromDb(): Promise<ReminderItem[]> {
-  if (MEMORY_MODE) return memoryReminders;
+export async function getAllRemindersFromDb(userId: string): Promise<ReminderItem[]> {
+  if (MEMORY_MODE) return memoryItems(memoryReminders, userId);
   await ensureTablesExist();
-  const list = await db.select().from(reminders).orderBy(reminders.dueDate);
+  const list = await db.select().from(reminders).where(eq(reminders.userId, userId)).orderBy(reminders.dueDate);
   return list.map((r) => ({
     id: r.id,
     eventId: r.eventId || undefined,
@@ -327,11 +369,12 @@ export async function getAllRemindersFromDb(): Promise<ReminderItem[]> {
   }));
 }
 
-export async function saveReminderToDb(reminder: ReminderItem, userId?: string): Promise<void> {
+export async function saveReminderToDb(reminder: ReminderItem, userId: string): Promise<void> {
   if (MEMORY_MODE) {
-    const idx = memoryReminders.findIndex((r) => r.id === reminder.id);
-    if (idx >= 0) memoryReminders[idx] = reminder;
-    else memoryReminders.unshift(reminder);
+    const userReminders = memoryItems(memoryReminders, userId);
+    const idx = userReminders.findIndex((r) => r.id === reminder.id);
+    if (idx >= 0) userReminders[idx] = reminder;
+    else userReminders.unshift(reminder);
     return;
   }
   await ensureTablesExist();
@@ -348,29 +391,32 @@ export async function saveReminderToDb(reminder: ReminderItem, userId?: string):
     priority: reminder.priority,
     notes: reminder.notes || null,
   };
-  await db
+  const result = await db
     .insert(reminders)
-    .values({ id: reminder.id, userId: userId || null, ...row })
-    .onConflictDoUpdate({ target: reminders.id, set: row });
+    .values({ id: reminder.id, userId, ...row })
+    .onConflictDoUpdate({ target: reminders.id, set: { ...row, userId }, where: eq(reminders.userId, userId) })
+    .returning({ id: reminders.id });
+  if (result.length === 0) throw new OwnershipConflictError();
 }
 
-export async function deleteReminderFromDb(id: string): Promise<void> {
+export async function deleteReminderFromDb(id: string, userId: string): Promise<void> {
   if (MEMORY_MODE) {
-    memoryReminders = memoryReminders.filter((r) => r.id !== id);
+    const userReminders = memoryItems(memoryReminders, userId);
+    memoryReminders.set(userId, userReminders.filter((r) => r.id !== id));
     return;
   }
   await ensureTablesExist();
-  await db.delete(reminders).where(eq(reminders.id, id));
+  await db.delete(reminders).where(and(eq(reminders.id, id), eq(reminders.userId, userId)));
 }
 
 // ---------------------------------------------------------------------------
 // Egresos
 // ---------------------------------------------------------------------------
 
-export async function getAllExpensesFromDb(): Promise<ExpenseItem[]> {
-  if (MEMORY_MODE) return memoryExpenses;
+export async function getAllExpensesFromDb(userId: string): Promise<ExpenseItem[]> {
+  if (MEMORY_MODE) return memoryItems(memoryExpenses, userId);
   await ensureTablesExist();
-  const list = await db.select().from(expenses).orderBy(desc(expenses.date));
+  const list = await db.select().from(expenses).where(eq(expenses.userId, userId)).orderBy(desc(expenses.date));
   return list.map((e) => ({
     id: e.id,
     date: e.date,
@@ -387,11 +433,12 @@ export async function getAllExpensesFromDb(): Promise<ExpenseItem[]> {
   }));
 }
 
-export async function saveExpenseToDb(expense: ExpenseItem, userId?: string): Promise<void> {
+export async function saveExpenseToDb(expense: ExpenseItem, userId: string): Promise<void> {
   if (MEMORY_MODE) {
-    const idx = memoryExpenses.findIndex((e) => e.id === expense.id);
-    if (idx >= 0) memoryExpenses[idx] = expense;
-    else memoryExpenses.unshift(expense);
+    const userExpenses = memoryItems(memoryExpenses, userId);
+    const idx = userExpenses.findIndex((e) => e.id === expense.id);
+    if (idx >= 0) userExpenses[idx] = expense;
+    else userExpenses.unshift(expense);
     return;
   }
   await ensureTablesExist();
@@ -407,58 +454,71 @@ export async function saveExpenseToDb(expense: ExpenseItem, userId?: string): Pr
     receiptNumber: expense.receiptNumber || null,
     notes: expense.notes || null,
   };
-  await db
+  const result = await db
     .insert(expenses)
-    .values({ id: expense.id, userId: userId || null, ...row })
-    .onConflictDoUpdate({ target: expenses.id, set: row });
+    .values({ id: expense.id, userId, ...row })
+    .onConflictDoUpdate({ target: expenses.id, set: { ...row, userId }, where: eq(expenses.userId, userId) })
+    .returning({ id: expenses.id });
+  if (result.length === 0) throw new OwnershipConflictError();
 }
 
-export async function deleteExpenseFromDb(id: string): Promise<void> {
+export async function deleteExpenseFromDb(id: string, userId: string): Promise<void> {
   if (MEMORY_MODE) {
-    memoryExpenses = memoryExpenses.filter((e) => e.id !== id);
+    const userExpenses = memoryItems(memoryExpenses, userId);
+    memoryExpenses.set(userId, userExpenses.filter((e) => e.id !== id));
     return;
   }
   await ensureTablesExist();
-  await db.delete(expenses).where(eq(expenses.id, id));
+  await db.delete(expenses).where(and(eq(expenses.id, id), eq(expenses.userId, userId)));
 }
 
 // ---------------------------------------------------------------------------
 // Vaciar / demo
 // ---------------------------------------------------------------------------
 
-export async function clearAllFromDb(): Promise<void> {
+export async function clearAllFromDb(userId: string): Promise<void> {
   if (MEMORY_MODE) {
-    memoryEvents = [];
-    memoryReminders = [];
-    memoryExpenses = [];
+    memoryEvents.set(userId, []);
+    memoryReminders.set(userId, []);
+    memoryExpenses.set(userId, []);
     memoryReceiptCounter = 0;
     return;
   }
   await ensureTablesExist();
-  const pool = createPool();
-  await pool.query(`TRUNCATE TABLE payments, reminders, expenses, events CASCADE;`);
+  await db.transaction(async (tx) => {
+    await tx.delete(reminders).where(eq(reminders.userId, userId));
+    await tx.delete(expenses).where(eq(expenses.userId, userId));
+    await tx.delete(events).where(eq(events.userId, userId));
+  });
 }
 
 function withoutReceipts(ev: EventItem): EventItem {
   return { ...ev, paymentHistory: (ev.paymentHistory || []).map((p) => ({ ...p, receiptNumber: undefined })) };
 }
 
-export async function loadDemoData(): Promise<void> {
-  await clearAllFromDb();
-  for (const ev of structuredClone(INITIAL_EVENTS)) await saveEventToDb(withoutReceipts(ev));
-  for (const rem of structuredClone(INITIAL_REMINDERS)) await saveReminderToDb(rem);
-  for (const exp of structuredClone(INITIAL_EXPENSES)) await saveExpenseToDb(exp);
-}
-
-// Los datos de ejemplo se cargan solo si se pide (SEED_DEMO=true) o en modo
-// memoria. Antes se cargaban en cualquier base vacía, incluida la de un cliente.
-export async function seedInitialDataIfEmpty(): Promise<void> {
-  if (MEMORY_MODE) {
-    await loadDemoData();
-    return;
+export async function loadDemoData(userId: string): Promise<void> {
+  await clearAllFromDb(userId);
+  const demoId = (id: string) => `demo-${userId}-${id}`;
+  for (const ev of structuredClone(INITIAL_EVENTS)) {
+    const event = withoutReceipts(ev);
+    await saveEventToDb({
+      ...event,
+      id: demoId(event.id),
+      paymentHistory: event.paymentHistory?.map((payment) => ({ ...payment, id: demoId(payment.id) })),
+    }, userId);
   }
-  if (process.env.SEED_DEMO !== 'true') return;
-  await ensureTablesExist();
-  const existing = await db.select().from(events).limit(1);
-  if (existing.length === 0) await loadDemoData();
+  for (const rem of structuredClone(INITIAL_REMINDERS)) {
+    await saveReminderToDb({
+      ...rem,
+      id: demoId(rem.id),
+      eventId: rem.eventId ? demoId(rem.eventId) : undefined,
+    }, userId);
+  }
+  for (const exp of structuredClone(INITIAL_EXPENSES)) {
+    await saveExpenseToDb({
+      ...exp,
+      id: demoId(exp.id),
+      eventId: exp.eventId ? demoId(exp.eventId) : undefined,
+    }, userId);
+  }
 }

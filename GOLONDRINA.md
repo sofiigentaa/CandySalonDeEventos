@@ -31,8 +31,11 @@ mensajes a clientes se arman en memoria y se borran al cerrarlos.
 
 - El servidor pone el número, la fecha y la huella:
   `sha256(numero|fecha|tipo|accion|cantidad|minutos|huella_anterior)`.
-- La tabla `calandria_log` no deja modificar ni borrar líneas, y "Vaciar todo" /
-  "Restablecer demo" no la tocan. La API pública de Supabase no tiene acceso.
+- El historial `calandria_user_log` tiene una cadena independiente por cuenta y
+  no deja modificar ni borrar líneas. "Vaciar todo" / "Restablecer demo" no lo
+  tocan. La API pública de Supabase no tiene acceso.
+- El historial anterior (`calandria_log`) se conserva en la base como archivo,
+  pero no se mezcla con las cuentas nuevas.
 - Sin conexión, la acción queda pendiente en el equipo y se sube sola.
 - El registro se ve en pantalla (con la verificación). Para una auditoría,
   tecnoros.ar lo saca directo de la base de datos; el cliente no tiene que hacer nada.

@@ -88,6 +88,8 @@ const DEFAULT_SERVICES = [
   { id: 'hora_extra', name: '⏰ Hora adicional de salón', price: 30000, selected: false, quantity: 1, icon: '⏰' },
 ];
 
+type BaseRentType = 'weekday' | 'friday' | 'weekend' | 'custom';
+
 export const EventModal: React.FC<EventModalProps> = ({
   isOpen,
   onClose,
@@ -116,8 +118,10 @@ export const EventModal: React.FC<EventModalProps> = ({
 
   // Mode: Direct Total (false) vs Calculator Mode (true)
   const [isCalculatorMode, setIsCalculatorMode] = useState<boolean>(false);
-  const [baseRentType, setBaseRentType] = useState<'weekday' | 'friday' | 'weekend' | 'custom'>('weekend');
+  const [baseRentType, setBaseRentType] = useState<BaseRentType>('weekend');
   const [customBasePrice, setCustomBasePrice] = useState<number>(195000);
+  const [baseRentPriceOverride, setBaseRentPriceOverride] = useState<number | null>(null);
+  const [baseRentServiceName, setBaseRentServiceName] = useState<string | null>(null);
   const [servicesOptions, setServicesOptions] = useState<
     Array<{
       id: string;
@@ -141,7 +145,9 @@ export const EventModal: React.FC<EventModalProps> = ({
     friday: 160000,
     weekend: 195000,
   });
-  const effectiveBasePrice = baseRentType === 'custom' ? (customBasePrice || 0) : basePrices[baseRentType];
+  const effectiveBasePrice =
+    baseRentPriceOverride ??
+    (baseRentType === 'custom' ? customBasePrice : basePrices[baseRentType]);
 
   // Auto-detect day of week for recommended base rent
   const getDayRecommendation = (dateStr: string): 'weekday' | 'friday' | 'weekend' => {
@@ -175,8 +181,8 @@ export const EventModal: React.FC<EventModalProps> = ({
       setClientEmail(initialEvent.clientEmail || '');
       setEventType(initialEvent.eventType || 'Cumpleaños');
       setEventDate(initialEvent.eventDate || getTodayString());
-      setEventTime(initialEvent.eventTime || '20:00');
-      setLocation(initialEvent.location || 'Candy Salón de Eventos');
+      setEventTime(initialEvent.eventTime ?? '');
+      setLocation(initialEvent.location ?? '');
       setGuestCount(initialEvent.guestCount ?? '');
       setTotalAmount(initialEvent.totalAmount ?? 0);
       setDepositAmount(initialEvent.depositAmount ?? 0);
@@ -184,8 +190,28 @@ export const EventModal: React.FC<EventModalProps> = ({
 
       // Sync contracted services if editing
       if (initialEvent.contractedServices && initialEvent.contractedServices.length > 0) {
-        const hasSalonRent = initialEvent.contractedServices.some((s) => s.category === 'salon');
+        const salonRent = initialEvent.contractedServices.find((s) => s.category === 'salon');
+        const hasSalonRent = Boolean(salonRent);
         setIsCalculatorMode(hasSalonRent);
+        if (salonRent) {
+          const rentName = salonRent.name.toLowerCase();
+          const rentType: BaseRentType = rentName.includes('lun a jue')
+            ? 'weekday'
+            : rentName.includes('viernes')
+              ? 'friday'
+              : rentName.includes('sábado/dom/feriado')
+                ? 'weekend'
+                : 'custom';
+          setBaseRentType(rentType);
+          setCustomBasePrice(salonRent.price);
+          setBaseRentPriceOverride(salonRent.price);
+          setBaseRentServiceName(salonRent.name);
+        } else {
+          setBaseRentType(getDayRecommendation(initialEvent.eventDate));
+          setCustomBasePrice(195000);
+          setBaseRentPriceOverride(null);
+          setBaseRentServiceName(null);
+        }
 
         // Map existing services
         const initialCustoms: Array<{
@@ -202,7 +228,7 @@ export const EventModal: React.FC<EventModalProps> = ({
             (cs) => cs.id === def.id || cs.name.toLowerCase().includes(def.id)
           );
           if (match) {
-            return { ...def, selected: true, quantity: match.quantity || 1, price: match.price || def.price };
+            return { ...def, selected: true, quantity: match.quantity ?? 1, price: match.price ?? def.price };
           }
           return { ...def, selected: false };
         });
@@ -217,7 +243,7 @@ export const EventModal: React.FC<EventModalProps> = ({
               name: cs.name,
               price: cs.price,
               selected: true,
-              quantity: cs.quantity || 1,
+              quantity: cs.quantity ?? 1,
               icon: '✨',
             });
           }
@@ -226,6 +252,10 @@ export const EventModal: React.FC<EventModalProps> = ({
         setServicesOptions([...mappedDefaults, ...initialCustoms]);
       } else {
         setIsCalculatorMode(false);
+        setBaseRentType(getDayRecommendation(initialEvent.eventDate));
+        setCustomBasePrice(195000);
+        setBaseRentPriceOverride(null);
+        setBaseRentServiceName(null);
         setServicesOptions(DEFAULT_SERVICES.map((s) => ({ ...s, selected: false })));
       }
 
@@ -261,6 +291,9 @@ export const EventModal: React.FC<EventModalProps> = ({
       if (initialDepositRecord) {
         setDepositMethod(initialDepositRecord.method);
         setDepositNotes(initialDepositRecord.notes || '');
+      } else {
+        setDepositMethod('Transferencia');
+        setDepositNotes('');
       }
     } else {
       // New Event: Pre-configured and enabled by default
@@ -279,6 +312,10 @@ export const EventModal: React.FC<EventModalProps> = ({
       setDepositNotes('');
       setGeneralNotes('');
       setIsCalculatorMode(false);
+      setBaseRentType(getDayRecommendation(defaultDate || getTodayString()));
+      setCustomBasePrice(195000);
+      setBaseRentPriceOverride(null);
+      setBaseRentServiceName(null);
       setServicesOptions(DEFAULT_SERVICES.map((s) => ({ ...s, selected: false })));
 
       setRemindersConfig([
@@ -329,7 +366,7 @@ export const EventModal: React.FC<EventModalProps> = ({
   // Real-time sum of selected services
   const additionalsSum = servicesOptions
     .filter((s) => s.selected)
-    .reduce((sum, s) => sum + s.price * (s.quantity || 1), 0);
+    .reduce((sum, s) => sum + s.price * (s.quantity ?? 1), 0);
   const calculatedTotalWithBase = effectiveBasePrice + additionalsSum;
 
   const dayOfWeek = eventDate ? getDayOfWeekName(eventDate) : '';
@@ -397,7 +434,7 @@ export const EventModal: React.FC<EventModalProps> = ({
       if (isCalculatorMode) {
         const newAddSum = updated
           .filter((s) => s.selected)
-          .reduce((sum, s) => sum + s.price * (s.quantity || 1), 0);
+          .reduce((sum, s) => sum + s.price * (s.quantity ?? 1), 0);
         setTotalAmount(effectiveBasePrice + newAddSum);
       }
       return updated;
@@ -408,7 +445,7 @@ export const EventModal: React.FC<EventModalProps> = ({
     setServicesOptions((prev) => {
       const updated = prev.map((s) => {
         if (s.id === id) {
-          const newQ = Math.max(1, (s.quantity || 1) + delta);
+          const newQ = Math.max(1, (s.quantity ?? 1) + delta);
           return { ...s, quantity: newQ };
         }
         return s;
@@ -416,7 +453,7 @@ export const EventModal: React.FC<EventModalProps> = ({
       if (isCalculatorMode) {
         const newAddSum = updated
           .filter((s) => s.selected)
-          .reduce((sum, s) => sum + s.price * (s.quantity || 1), 0);
+          .reduce((sum, s) => sum + s.price * (s.quantity ?? 1), 0);
         setTotalAmount(effectiveBasePrice + newAddSum);
       }
       return updated;
@@ -430,7 +467,7 @@ export const EventModal: React.FC<EventModalProps> = ({
       if (isCalculatorMode) {
         const newAddSum = updated
           .filter((s) => s.selected)
-          .reduce((sum, s) => sum + s.price * (s.quantity || 1), 0);
+          .reduce((sum, s) => sum + s.price * (s.quantity ?? 1), 0);
         setTotalAmount(effectiveBasePrice + newAddSum);
       }
       return updated;
@@ -439,18 +476,19 @@ export const EventModal: React.FC<EventModalProps> = ({
 
   // Permite a la usuaria editar los precios base sugeridos (día de semana / viernes / fin de semana)
   const updateBasePriceForType = (type: 'weekday' | 'friday' | 'weekend', newPrice: number) => {
-    setBasePrices((prev) => {
-      const updated = { ...prev, [type]: Math.max(0, newPrice) };
-      if (baseRentType === type) {
-        setTotalAmount(Math.max(0, newPrice) + additionalsSum);
-      }
-      return updated;
-    });
+    const price = Math.max(0, newPrice);
+    setBasePrices((prev) => ({ ...prev, [type]: price }));
+    if (baseRentType === type) {
+      setBaseRentPriceOverride(price);
+      setTotalAmount(price + additionalsSum);
+    }
   };
 
-  const handleSelectBaseRentType = (type: 'weekday' | 'friday' | 'weekend' | 'custom') => {
+  const handleSelectBaseRentType = (type: BaseRentType) => {
     setBaseRentType(type);
-    const newBase = type === 'custom' ? (customBasePrice || 0) : basePrices[type];
+    setBaseRentPriceOverride(null);
+    setBaseRentServiceName(null);
+    const newBase = type === 'custom' ? customBasePrice : basePrices[type];
     setTotalAmount(newBase + additionalsSum);
   };
 
@@ -487,7 +525,7 @@ export const EventModal: React.FC<EventModalProps> = ({
       if (isCalculatorMode) {
         const newAddSum = updated
           .filter((s) => s.selected)
-          .reduce((sum, s) => sum + s.price * (s.quantity || 1), 0);
+          .reduce((sum, s) => sum + s.price * (s.quantity ?? 1), 0);
         setTotalAmount(effectiveBasePrice + newAddSum);
       }
       return updated;
@@ -610,7 +648,8 @@ export const EventModal: React.FC<EventModalProps> = ({
     if (isCalculatorMode) {
       contractedServicesList.push({
         id: 'base-rent',
-        name: `Alquiler Salón (${baseRentType === 'weekday' ? 'Lun a Jue' : baseRentType === 'friday' ? 'Viernes' : baseRentType === 'weekend' ? 'Sábado/Dom/Feriado' : 'Personalizado'} - 3 hs)`,
+        name: baseRentServiceName ??
+          `Alquiler Salón (${baseRentType === 'weekday' ? 'Lun a Jue' : baseRentType === 'friday' ? 'Viernes' : baseRentType === 'weekend' ? 'Sábado/Dom/Feriado' : 'Personalizado'} - 3 hs)`,
         price: effectiveBasePrice,
         quantity: 1,
         category: 'salon',
@@ -625,7 +664,7 @@ export const EventModal: React.FC<EventModalProps> = ({
           id: s.id,
           name: s.name,
           price: s.price,
-          quantity: s.quantity || 1,
+          quantity: s.quantity ?? 1,
           category: 'adicional',
         });
       });
@@ -639,8 +678,8 @@ export const EventModal: React.FC<EventModalProps> = ({
       eventType,
       eventDate,
       eventTime: eventTime.trim() || undefined,
-      location: location.trim() || 'Candy Salón de Eventos',
-      guestCount: typeof guestCount === 'number' && guestCount > 0 ? guestCount : undefined,
+      location: location.trim(),
+      guestCount: typeof guestCount === 'number' ? guestCount : undefined,
       totalAmount: numTotal,
       depositAmount: numDeposit,
       paymentHistory: updatedHistory,
@@ -869,9 +908,9 @@ export const EventModal: React.FC<EventModalProps> = ({
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
-                      { type: 'weekday' as const, label: 'Lun a Jue', price: basePrices.weekday, desc: '3 hs base' },
-                      { type: 'friday' as const, label: 'Viernes', price: basePrices.friday, desc: '3 hs base' },
-                      { type: 'weekend' as const, label: 'Sáb / Dom / Feriado', price: basePrices.weekend, desc: '3 hs base' },
+                      { type: 'weekday' as const, label: 'Lun a Jue', price: baseRentType === 'weekday' && baseRentPriceOverride !== null ? baseRentPriceOverride : basePrices.weekday, desc: '3 hs base' },
+                      { type: 'friday' as const, label: 'Viernes', price: baseRentType === 'friday' && baseRentPriceOverride !== null ? baseRentPriceOverride : basePrices.friday, desc: '3 hs base' },
+                      { type: 'weekend' as const, label: 'Sáb / Dom / Feriado', price: baseRentType === 'weekend' && baseRentPriceOverride !== null ? baseRentPriceOverride : basePrices.weekend, desc: '3 hs base' },
                       { type: 'custom' as const, label: 'Personalizado', price: customBasePrice, desc: 'Monto libre' },
                     ].map((opt) => {
                       const isSelected = baseRentType === opt.type;
@@ -922,6 +961,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                         onChange={(e) => {
                           const val = Number(e.target.value) || 0;
                           setCustomBasePrice(val);
+                          setBaseRentPriceOverride(val);
                           setTotalAmount(val + additionalsSum);
                         }}
                         className="w-36 px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg font-bold"
@@ -1705,4 +1745,3 @@ export const EventModal: React.FC<EventModalProps> = ({
     </div>
   );
 };
-

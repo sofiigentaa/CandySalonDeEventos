@@ -2,6 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { EventItem, ExpenseItem, ReminderItem } from '../types.ts';
 import { CalandriaAction, CalandriaKind, LogEntry, verifyChain, VerifyResult } from './chain.ts';
 import { buildSuggestions, NewReminder, Suggestion } from './suggestions.ts';
+import { apiRequest } from '../utils/api.ts';
+import { getUserScopedStorageKey } from '../utils/storage.ts';
 
 // Lo que se muestra después de aprobar los saldos: mensajes listos para cada
 // cliente. Vive solo en memoria y se borra al cerrar.
@@ -51,7 +53,9 @@ const PENDING = 'candy_calandria_pending';
 
 function readJson<T>(k: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(k);
+    const key = getUserScopedStorageKey(k);
+    if (!key) return fallback;
+    const raw = localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -59,7 +63,8 @@ function readJson<T>(k: string, fallback: T): T {
 }
 function writeJson(k: string, v: unknown) {
   try {
-    localStorage.setItem(k, JSON.stringify(v));
+    const key = getUserScopedStorageKey(k);
+    if (key) localStorage.setItem(key, JSON.stringify(v));
   } catch {
     // ignorar
   }
@@ -67,13 +72,11 @@ function writeJson(k: string, v: unknown) {
 
 async function postLog(p: PendingAction): Promise<boolean> {
   try {
-    const res = await fetch('/api/calandria/log', {
+    await apiRequest('/api/calandria/log', {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ kind: p.kind, action: p.action, qty: p.qty, minutes: p.minutes }),
     });
-    return res.ok;
+    return true;
   } catch {
     return false;
   }
@@ -135,11 +138,8 @@ export const CalandriaProvider: React.FC<ProviderProps> = ({ children, salon, ev
     await flushPending();
     setPending(readJson(PENDING, []));
     try {
-      const res = await fetch('/api/calandria/log', { credentials: 'same-origin' });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) setLog(data);
-      }
+      const data = await apiRequest<LogEntry[]>('/api/calandria/log');
+      if (Array.isArray(data)) setLog(data);
     } catch {
       // sin conexión: queda lo último que se leyó
     }

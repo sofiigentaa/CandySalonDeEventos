@@ -1,150 +1,63 @@
-import crypto from 'crypto';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import express from 'express';
 
-// Login del salón: un email autorizado + una contraseña definida en el servidor.
-// La sesión es una cookie HttpOnly firmada con HMAC (no se puede falsificar sin
-// conocer SESSION_SECRET). Mismo esquema que la Agenda Odontológica.
+type AuthenticatedUser = Pick<User, 'id' | 'email'>;
 
-const SESSION_COOKIE = 'candy_session';
-const SESSION_HOURS = 12;
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+declare global {
+  namespace Express {
+    interface Request {
+      user?: AuthenticatedUser;
+    }
+  }
+}
+
+let supabase: SupabaseClient | null = null;
 
 export function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
-function sessionSecret(): string {
-  const secret = process.env.SESSION_SECRET || '';
-  if (secret) return secret;
-  // Solo en desarrollo: secreto aleatorio por arranque.
-  return isProduction() ? '' : devSecret;
-}
-const devSecret = crypto.randomBytes(32).toString('hex');
-
-function salonPassword(): string {
-  const configured = process.env.SALON_PASSWORD || '';
-  if (configured) return configured;
-  return isProduction() ? '' : 'candy-demo';
-}
-
-function allowedEmails(): string[] {
-  return (process.env.SALON_EMAILS || '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function assertProductionSecrets(): void {
-  if (!isProduction()) return;
-  if ((process.env.SALON_PASSWORD || '').length < 12) {
-    console.error('Producción: SALON_PASSWORD debe tener al menos 12 caracteres. El servidor no arranca.');
-    process.exit(1);
+function getSupabaseClient(): SupabaseClient | null {
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  if (!supabase) {
+    supabase = createClient(url, key, {
+      auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+    });
   }
-  if ((process.env.SESSION_SECRET || '').length < 32) {
-    console.error('Producción: SESSION_SECRET debe tener al menos 32 caracteres aleatorios. El servidor no arranca.');
-    process.exit(1);
-  }
+  return supabase;
 }
 
-function timingSafeStringEqual(a: string, b: string): boolean {
-  const ha = crypto.createHash('sha256').update(a).digest();
-  const hb = crypto.createHash('sha256').update(b).digest();
-  return crypto.timingSafeEqual(ha, hb) && a.length === b.length;
+export function assertSupabaseConfig(): void {
+  if (getSupabaseClient()) return;
+  throw new Error('Configurá VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY para habilitar la autenticación.');
 }
 
-function clientIp(req: express.Request): string {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return fwd || req.socket.remoteAddress || 'unknown';
-}
+export async function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authorization = req.headers.authorization || '';
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  if (!match) return res.status(401).json({ error: 'No autorizado. Iniciá sesión.' });
 
-function tooManyFailedLogins(ip: string): boolean {
-  const row = loginAttempts.get(ip);
-  if (!row) return false;
-  if (Date.now() > row.resetAt) {
-    loginAttempts.delete(ip);
-    return false;
-  }
-  return row.count >= 8;
-}
+  const client = getSupabaseClient();
+  if (!client) return res.status(503).json({ error: 'La autenticación no está configurada en el servidor.' });
 
-function recordFailedLogin(ip: string): void {
-  const now = Date.now();
-  const row = loginAttempts.get(ip);
-  if (!row || now > row.resetAt) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
-    return;
-  }
-  row.count += 1;
-}
-
-function signSession(email: string): string {
-  const payload = Buffer.from(JSON.stringify({ email, exp: Date.now() + SESSION_HOURS * 3600 * 1000 })).toString('base64url');
-  const sig = crypto.createHmac('sha256', sessionSecret()).update(payload).digest('hex');
-  return `${payload}.${sig}`;
-}
-
-export function readSession(req: express.Request): { email: string } | null {
-  const secret = sessionSecret();
-  if (!secret) return null;
-  const raw = (req.headers.cookie || '')
-    .split(';')
-    .map((p) => p.trim())
-    .find((c) => c.startsWith(`${SESSION_COOKIE}=`));
-  if (!raw) return null;
-  const token = decodeURIComponent(raw.slice(SESSION_COOKIE.length + 1));
-  const [payload, sig] = token.split('.');
-  if (!payload || !sig) return null;
-  const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-  if (!timingSafeStringEqual(sig, expected)) return null;
   try {
-    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (!data.exp || data.exp < Date.now()) return null;
-    return { email: String(data.email) };
-  } catch {
-    return null;
-  }
-}
-
-export function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const session = readSession(req);
-  if (session) {
-    (req as any).user = { uid: session.email, email: session.email };
+    const { data, error } = await client.auth.getUser(match[1]);
+    if (error) {
+      const status = error.status === 401 || error.status === 403 ? 401 : 503;
+      return res.status(status).json({
+        error: status === 401 ? 'Tu sesión venció. Volvé a iniciar sesión.' : 'No se pudo verificar la sesión.',
+      });
+    }
+    if (!data.user) return res.status(401).json({ error: 'No autorizado. Iniciá sesión.' });
+    if (!data.user.email_confirmed_at) {
+      return res.status(403).json({ error: 'Verificá tu correo electrónico antes de continuar.' });
+    }
+    req.user = { id: data.user.id, email: data.user.email || '' };
     return next();
+  } catch (error) {
+    console.error('No se pudo verificar la sesión de Supabase:', error);
+    return res.status(503).json({ error: 'No se pudo verificar la sesión. Probá de nuevo.' });
   }
-  return res.status(401).json({ error: 'No autorizado. Iniciá sesión.' });
-}
-
-export function registerAuthRoutes(app: express.Express): void {
-  app.post('/api/auth/login', (req, res) => {
-    const ip = clientIp(req);
-    if (tooManyFailedLogins(ip)) {
-      return res.status(429).json({ error: 'Demasiados intentos. Esperá 15 minutos.' });
-    }
-    const email = String(req.body?.email || '').trim().toLowerCase();
-    const password = String(req.body?.password || '');
-    const expected = salonPassword();
-    const emails = allowedEmails();
-    const emailOk = email.includes('@') && (emails.length === 0 || emails.includes(email));
-    if (!expected || !emailOk || !timingSafeStringEqual(password, expected)) {
-      recordFailedLogin(ip);
-      return res.status(401).json({ error: 'Email o contraseña incorrectos' });
-    }
-    loginAttempts.delete(ip);
-    res.setHeader(
-      'Set-Cookie',
-      `${SESSION_COOKIE}=${encodeURIComponent(signSession(email))}; HttpOnly; Path=/; Max-Age=${SESSION_HOURS * 3600}; SameSite=Strict${isProduction() ? '; Secure' : ''}`
-    );
-    return res.json({ success: true, email });
-  });
-
-  app.get('/api/auth/me', (req, res) => {
-    const session = readSession(req);
-    if (!session) return res.json({ authenticated: false });
-    return res.json({ authenticated: true, email: session.email });
-  });
-
-  app.post('/api/auth/logout', (_req, res) => {
-    res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict`);
-    res.json({ success: true });
-  });
 }

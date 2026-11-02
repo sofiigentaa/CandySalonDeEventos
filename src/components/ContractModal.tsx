@@ -8,6 +8,7 @@ import {
   getRemainingBalance,
 } from '../utils/dateUtils.ts';
 import { generateSmartContractFallback } from '../utils/contractTemplate.ts';
+import { apiRequest } from '../utils/api.ts';
 import {
   X,
   FileSignature,
@@ -98,9 +99,12 @@ export const ContractModal: React.FC<ContractModalProps> = ({
     setIsChatLoading(true);
 
     try {
-      const res = await fetch('/api/ai/contract-assistant-chat', {
+      const data = await apiRequest<{
+        reply: string;
+        proposedText?: string | null;
+        scope?: 'full_contract' | 'clause' | null;
+      }>('/api/ai/contract-assistant-chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           event,
           currency,
@@ -109,8 +113,6 @@ export const ContractModal: React.FC<ContractModalProps> = ({
           message: text,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al conectar con el asistente');
 
       setChatMessages((prev) => [
         ...prev,
