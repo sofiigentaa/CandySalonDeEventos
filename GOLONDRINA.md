@@ -33,7 +33,7 @@ mensajes a clientes se arman en memoria y se borran al cerrarlos.
   `sha256(numero|fecha|tipo|accion|cantidad|minutos|huella_anterior)`.
 - El historial `calandria_user_log` tiene una cadena independiente por cuenta y
   no deja modificar ni borrar líneas. "Vaciar todo" / "Restablecer demo" no lo
-  tocan. La API pública de Supabase no tiene acceso.
+  tocan. Solo el servidor accede a la base.
 - El historial anterior (`calandria_log`) se conserva en la base como archivo,
   pero no se mezcla con las cuentas nuevas.
 - Sin conexión, la acción queda pendiente en el equipo y se sube sola.

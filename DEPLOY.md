@@ -1,8 +1,8 @@
-# Candy: PostgreSQL local y Supabase Auth
+# Candy: PostgreSQL y login con 2FA
 
 ## Desarrollo local en Ubuntu
 
-Supabase se usa solo para registro, inicio de sesión, verificación de correo y recuperación de contraseña. Los datos del salón se guardan en PostgreSQL local; no hace falta crear ni habilitar una base de datos en Supabase.
+El sistema no depende de servicios externos para el login: usuarios, contraseñas, 2FA y sesiones se guardan en el mismo PostgreSQL que los datos del salón.
 
 PostgreSQL debe estar instalado. Si no tenés permisos de administrador para crear bases en el cluster del sistema, inicializá un cluster privado bajo tu usuario. En Ubuntu:
 
@@ -23,13 +23,7 @@ sed -i '/^local[[:space:]]\+all[[:space:]]\+all[[:space:]]\+peer/i local all can
 
 El cluster escucha solo en la propia computadora. La aplicación usa el rol sin privilegios `candy_app` y se conecta por un socket protegido con permisos del usuario y autenticación *peer*; no guarda una contraseña de PostgreSQL. Si el directorio `data` ya existe, no repitas la inicialización.
 
-Copiar `.env.example` a `.env`; reemplazar `tu-usuario` en `SQL_HOST` por el resultado de `whoami`. Mantener `SQL_USER=candy_app`, `SQL_DB_NAME=candy_salon_eventos`, `SQL_PORT=55432` y `DB_SSL=false`. Completar solamente `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` con la URL del proyecto Supabase y su clave pública `anon`/`publishable`.
-
-En Supabase:
-
-1. Habilitar confirmación de email en **Authentication → Providers → Email**.
-2. En **Authentication → URL Configuration**, agregar `http://localhost:3005` a **Redirect URLs**.
-3. Configurar un proveedor SMTP si se necesitan correos de producción; el servicio predeterminado tiene límites para desarrollo.
+Copiar `.env.example` a `.env`; reemplazar `tu-usuario` en `SQL_HOST` por el resultado de `whoami`. Mantener `SQL_USER=candy_app`, `SQL_DB_NAME=candy_salon_eventos`, `SQL_PORT=55432` y `DB_SSL=false`.
 
 Al iniciar, la aplicación crea las tablas PostgreSQL, índices y restricciones necesarias. Iniciar PostgreSQL antes de la aplicación:
 
@@ -43,22 +37,34 @@ npm install
 npm run dev
 ```
 
-No usar una URL `pooler.supabase.com` para esta configuración local. No configurar `service_role` en el cliente.
+## Login y verificación en dos pasos (2FA)
+
+- **Registro:** email + contraseña (mínimo 8 caracteres). Después aparece un QR para vincular una app autenticadora (Google Authenticator, Microsoft Authenticator, Authy, etc.). La cuenta queda activa recién cuando se escribe el primer código de la app: ese paso reemplaza la verificación por correo.
+- **Ingreso:** email + contraseña y luego el código de 6 dígitos de la app.
+- **Olvidé mi contraseña:** email + código de la app + contraseña nueva. Cierra las sesiones abiertas en otros equipos.
+- Las contraseñas se guardan con `scrypt`; la sesión es una cookie `httpOnly` de 30 días y en la base solo queda el hash del token. Hay límite de intentos por IP y email, y cada código de la app sirve una sola vez.
+
+**Si alguien pierde el celular**, un administrador reinicia su 2FA con `psql` (en Render, usando la External Database URL). En el próximo ingreso le va a aparecer un QR nuevo:
+
+```sql
+UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE lower(email) = 'persona@email.com';
+DELETE FROM auth_tokens WHERE user_id = (SELECT uid FROM users WHERE lower(email) = 'persona@email.com');
+```
 
 ## Despliegue en Render
 
 El PostgreSQL local de una computadora no es accesible desde Render. El archivo `render.yaml` (Blueprint) crea todo junto: la base **PostgreSQL de Render** (`candy-salon-db`) y el servicio web, y conecta `DATABASE_URL` automáticamente con la URL interna de la base. Las tablas se crean solas en el primer arranque.
 
 1. En [dashboard.render.com](https://dashboard.render.com): **New → Blueprint**, elegir este repositorio y la rama `main`.
-2. Render pide los valores marcados `sync: false`: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (los mismos del `.env`) y, opcional, `GEMINI_API_KEY`.
+2. Render pide `GEMINI_API_KEY` (opcional, para la IA de contratos). Se puede dejar vacía.
 3. **Apply**. Cuando termine, abrir `https://<servicio>.onrender.com/api/health`: debe responder `"database":"postgres"`.
-4. En Supabase → **Authentication → URL Configuration**: poner la URL `https://<servicio>.onrender.com` como **Site URL** y agregarla a **Redirect URLs**.
+4. Entrar a `https://<servicio>.onrender.com` y crear la cuenta (con la app autenticadora a mano).
 
 Planes gratuitos: el servicio web se duerme tras 15 minutos sin uso (el primer acceso tarda ~1 minuto) y **la base PostgreSQL gratuita de Render vence a los 30 días**; para uso real pasarla a un plan pago (`plan: basic-256mb`) antes de esa fecha.
 
 Para respaldar o copiar datos, usar la **External Database URL** de la base (en su página de Render): `pg_dump "<external-url>" > respaldo.sql` y `psql "<external-url>" < respaldo.sql`.
 
-Las cuentas nuevas tienen datos aislados. Los registros antiguos sin propietario no se asignan automáticamente; revisar y asignar esos registros a la cuenta correspondiente antes de migrar una base previa.
+Cada cuenta ve solo sus datos. Si una base previa tiene usuarios de la época de Supabase en la tabla `users`, al registrarse con el mismo email se conserva su id y, con él, sus datos.
 
 ## Golondrina
 

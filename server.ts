@@ -21,7 +21,7 @@ import {
 } from './src/db/eventsService.ts';
 import { appendCalandriaLog, ensureCalandriaTable, getCalandriaLog, validateLogInput } from './src/server/calandriaLog.ts';
 import { generateContractWithGemini, chatWithContractAssistant } from './src/utils/aiContractService.ts';
-import { assertSupabaseConfig, isProduction, requireSession } from './src/server/session.ts';
+import { createAuthRouter, ensureAuthTables, isProduction, requireSession } from './src/server/auth.ts';
 import {
   ValidationError,
   findBookingConflict,
@@ -51,7 +51,6 @@ function sendError(res: express.Response, error: unknown, fallback: string) {
 const demoToolsEnabled = () => !isProduction() || process.env.ALLOW_DEMO_RESET === 'true';
 
 async function startServer() {
-  assertSupabaseConfig();
   if (isProduction() && isMemoryMode()) {
     throw new Error('Configurá DATABASE_URL para usar PostgreSQL en producción.');
   }
@@ -60,6 +59,8 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3005;
 
   app.disable('x-powered-by');
+  // Render (y cualquier proxy) pone la IP real del cliente en X-Forwarded-For.
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '1mb' }));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -78,11 +79,15 @@ async function startServer() {
   // "funcione" sin guardar nada.
   await ensureTablesExist();
   await ensureCalandriaTable();
+  await ensureAuthTables();
   console.log(isMemoryMode() ? 'Modo demo: datos en memoria (sin base de datos).' : 'Base de datos PostgreSQL conectada.');
 
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString(), database: isMemoryMode() ? 'memory' : 'postgres', demoTools: demoToolsEnabled() });
   });
+
+  // Registro, ingreso con app autenticadora (2FA), recuperar contraseña, salir.
+  app.use('/api/auth', createAuthRouter());
 
   // Todo lo que sigue exige sesión iniciada.
   app.use('/api', requireSession);

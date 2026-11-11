@@ -772,7 +772,7 @@ export default function App() {
       <Navbar
         onOpenNewEvent={() => handleOpenNewEvent()}
         onOpenNewExpense={handleOpenNewExpense}
-        onSyncSupabase={loadData}
+        onSyncDatabase={loadData}
         isRefreshing={isRefreshing}
         onClearAllData={demoTools ? handleClearAllData : undefined}
         onResetDemoData={demoTools ? handleResetData : undefined}

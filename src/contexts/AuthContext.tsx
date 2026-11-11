@@ -1,144 +1,115 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Session } from '@supabase/supabase-js';
 import { setApiHandlers } from '../utils/api.ts';
 import { setStorageUserId } from '../utils/storage.ts';
-import { isSupabaseConfigured, supabase } from '../utils/supabase.ts';
+
+// Autenticación propia: email + contraseña + código de app autenticadora (2FA).
+// La sesión vive en una cookie httpOnly que maneja el servidor.
 
 interface SessionUser {
   id: string;
   email: string;
 }
 
+// Respuesta del paso 1 (registro o ingreso): falta el código de la app.
+export interface PendingTwoFactor {
+  step: 'enroll' | 'verify';
+  pendingToken: string;
+  email: string;
+  qrCode?: string; // solo en 'enroll'
+  secret?: string; // solo en 'enroll'
+}
+
+type Result<T> = { data?: T; error?: string };
+
 interface AuthContextType {
   user: SessionUser | null;
   loading: boolean;
-  isConfigured: boolean;
-  passwordRecovery: boolean;
-  logIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (email: string, password: string) => Promise<string | null>;
-  requestPasswordReset: (email: string) => Promise<string | null>;
-  updatePassword: (password: string) => Promise<string | null>;
+  signUp: (email: string, password: string) => Promise<Result<PendingTwoFactor>>;
+  logIn: (email: string, password: string) => Promise<Result<PendingTwoFactor>>;
+  verifyCode: (pendingToken: string, code: string) => Promise<string | null>;
+  resetPassword: (email: string, code: string, password: string) => Promise<string | null>;
   logOut: () => Promise<void>;
 }
+
+const notReady = async () => ({ error: 'Cargando…' });
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  isConfigured: false,
-  passwordRecovery: false,
-  logIn: async () => 'La autenticación no está configurada.',
-  signUp: async () => 'La autenticación no está configurada.',
-  requestPasswordReset: async () => 'La autenticación no está configurada.',
-  updatePassword: async () => 'La autenticación no está configurada.',
+  signUp: notReady,
+  logIn: notReady,
+  verifyCode: async () => 'Cargando…',
+  resetPassword: async () => 'Cargando…',
   logOut: async () => {},
 });
 
-function authErrorMessage(message: string): string {
-  if (message.toLowerCase().includes('email not confirmed')) {
-    return 'Tu correo todavía no está verificado. Revisá tu bandeja de entrada.';
+async function postAuth<T>(path: string, body?: unknown): Promise<Result<T>> {
+  try {
+    const res = await fetch(`/api/auth/${path}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return { error: data?.error || `Error del servidor (${res.status}).` };
+    return { data: data as T };
+  } catch {
+    return { error: 'Sin conexión con el servidor. Revisá internet y probá de nuevo.' };
   }
-  if (message.toLowerCase().includes('invalid login credentials')) {
-    return 'Email o contraseña incorrectos.';
-  }
-  if (message.toLowerCase().includes('password should be at least')) {
-    return 'La contraseña debe tener al menos 8 caracteres.';
-  }
-  return message;
-}
-
-function confirmedUser(session: Session | null): SessionUser | null {
-  const account = session?.user;
-  if (!account?.email || !account.email_confirmed_at) return null;
-  return { id: account.id, email: account.email };
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [passwordRecovery, setPasswordRecovery] = useState(false);
+
+  const applyUser = useCallback((next: SessionUser | null) => {
+    setUser(next);
+    setStorageUserId(next?.id || null);
+  }, []);
 
   useEffect(() => {
-    setApiHandlers({
-      onUnauthorized: () => {
-        setUser(null);
-        setStorageUserId(null);
-        if (supabase) {
-          void supabase.auth.signOut().then(({ error }) => {
-            if (error) console.error('No se pudo cerrar la sesión vencida:', error);
-          });
-        }
-      },
-    });
+    setApiHandlers({ onUnauthorized: () => applyUser(null) });
 
-    if (!supabase) {
-      setLoading(false);
-      setStorageUserId(null);
-      return;
-    }
+    let cancelled = false;
+    fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' })
+      .then(async (res) => (res.ok ? ((await res.json()) as { user: SessionUser }).user : null))
+      .catch(() => null)
+      .then((current) => {
+        if (cancelled) return;
+        applyUser(current);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyUser]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const currentUser = confirmedUser(session);
-      setUser(currentUser);
-      setStorageUserId(currentUser?.id || null);
-      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
-      if (event === 'SIGNED_OUT') setPasswordRecovery(false);
-      setLoading(false);
-    });
+  const signUp = useCallback((email: string, password: string) => postAuth<PendingTwoFactor>('signup', { email, password }), []);
 
-    return () => subscription.unsubscribe();
-  }, []);
+  const logIn = useCallback((email: string, password: string) => postAuth<PendingTwoFactor>('login', { email, password }), []);
 
-  const logIn = useCallback(async (email: string, password: string) => {
-    if (!supabase) return 'La autenticación no está configurada.';
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error ? authErrorMessage(error.message) : null;
-  }, []);
+  const verifyCode = useCallback(async (pendingToken: string, code: string) => {
+    const result = await postAuth<{ user: SessionUser }>('verify', { pendingToken, code });
+    if (result.data) applyUser(result.data.user);
+    return result.error || null;
+  }, [applyUser]);
 
-  const signUp = useCallback(async (email: string, password: string) => {
-    if (!supabase) return 'La autenticación no está configurada.';
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: window.location.origin },
-    });
-    return error ? authErrorMessage(error.message) : null;
-  }, []);
-
-  const requestPasswordReset = useCallback(async (email: string) => {
-    if (!supabase) return 'La autenticación no está configurada.';
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
-    });
-    return error ? authErrorMessage(error.message) : null;
-  }, []);
-
-  const updatePassword = useCallback(async (password: string) => {
-    if (!supabase) return 'La autenticación no está configurada.';
-    const { error } = await supabase.auth.updateUser({ password });
-    if (!error) setPasswordRecovery(false);
-    return error ? authErrorMessage(error.message) : null;
-  }, []);
+  const resetPassword = useCallback(async (email: string, code: string, password: string) => {
+    const result = await postAuth<{ user: SessionUser }>('reset-password', { email, code, password });
+    if (result.data) applyUser(result.data.user);
+    return result.error || null;
+  }, [applyUser]);
 
   const logOut = useCallback(async () => {
-    if (!supabase) return;
-    const { error } = await supabase.auth.signOut();
-    if (error) throw new Error(authErrorMessage(error.message));
-  }, []);
+    const result = await postAuth('logout');
+    if (result.error) throw new Error(result.error);
+    applyUser(null);
+  }, [applyUser]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        isConfigured: isSupabaseConfigured,
-        passwordRecovery,
-        logIn,
-        signUp,
-        requestPasswordReset,
-        updatePassword,
-        logOut,
-      }}
-    >
+    <AuthContext.Provider value={{ user, loading, signUp, logIn, verifyCode, resetPassword, logOut }}>
       {children}
     </AuthContext.Provider>
   );

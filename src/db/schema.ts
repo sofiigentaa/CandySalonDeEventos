@@ -1,19 +1,23 @@
-import { boolean, integer, jsonb, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, boolean, integer, jsonb, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// Legacy account mirror; uid corresponds to the Supabase Auth user ID.
+// Cuentas de usuario (autenticación propia con 2FA; ver src/server/auth.ts).
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  uid: text('uid').notNull().unique(), // Supabase Auth user ID
+  uid: text('uid').notNull().unique(), // id público del usuario (UUID)
   email: text('email').notNull(),
   displayName: text('display_name'),
+  passwordHash: text('password_hash'),
+  totpSecret: text('totp_secret'),
+  totpEnabled: boolean('totp_enabled').notNull().default(false),
+  totpLastStep: bigint('totp_last_step', { mode: 'number' }),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
 // Events table for Candy Salón de Eventos
 export const events = pgTable('events', {
   id: text('id').primaryKey(),
-  userId: text('user_id'), // Supabase Auth user ID; null only for unassigned legacy records
+  userId: text('user_id'), // users.uid; null only for unassigned legacy records
   title: text('title').notNull(),
   clientName: text('client_name').notNull(),
   clientPhone: text('client_phone'),

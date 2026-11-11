@@ -1,5 +1,5 @@
 # Render Blueprint: servicio web + PostgreSQL de Render.
-# Supabase se usa solo para Auth (login, registro, verificación de correo).
+# Login propio: email + contraseña + app autenticadora (2FA). Sin Supabase.
 # Las tablas se crean solas al arrancar el servidor (ensureTablesExist).
 databases:
   - name: candy-salon-db
@@ -28,10 +28,6 @@ services:
         fromDatabase:
           name: candy-salon-db
           property: connectionString
-      - key: VITE_SUPABASE_URL
-        sync: false
-      - key: VITE_SUPABASE_ANON_KEY
-        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: ALLOW_DEMO_RESET

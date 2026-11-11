@@ -6,7 +6,7 @@ import { CalandriaBrand } from '../calandria/CalandriaUI.tsx';
 interface NavbarProps {
   onOpenNewEvent?: () => void;
   onOpenNewExpense?: () => void;
-  onSyncSupabase?: () => void;
+  onSyncDatabase?: () => void;
   isRefreshing?: boolean;
   onClearAllData?: () => void;
   onResetDemoData?: () => void;
@@ -22,7 +22,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewEvent,
-  onSyncSupabase,
+  onSyncDatabase,
   isRefreshing = false,
   onClearAllData,
   onResetDemoData,
@@ -157,13 +157,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-            {/* Ruedita: Sincronización y Opciones de Supabase / Base de datos */}
+            {/* Ruedita: Sincronización y opciones de base de datos */}
             <div className="relative" ref={menuRef}>
               <button
                 id="btn-database-sync-menu"
                 type="button"
                 onClick={() => setIsMenuOpen((prev) => !prev)}
-                title="Sincronización con Supabase y opciones de base de datos"
+                title="Sincronización y opciones de base de datos"
                 className={`flex items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer ${
                   isMenuOpen
                     ? 'bg-pink-100 text-pink-700 border-pink-300 shadow-xs ring-2 ring-pink-400/20'
@@ -180,7 +180,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="px-3.5 py-2 border-b border-slate-100">
                     <div className="flex items-center gap-2">
                       <Database className="w-4 h-4 text-pink-600" />
-                      <span className="text-xs font-bold text-slate-800">Base de Datos / Supabase</span>
+                      <span className="text-xs font-bold text-slate-800">Base de datos</span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-0.5">Sincroniza o administra los datos</p>
                   </div>
@@ -222,13 +222,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </button>
                     )}
 
-                    {/* Sincronizar con Supabase */}
-                    {onSyncSupabase && (
+                    {/* Sincronizar con la base de datos */}
+                    {onSyncDatabase && (
                       <button
                         type="button"
                         onClick={() => {
                           setIsMenuOpen(false);
-                          onSyncSupabase();
+                          onSyncDatabase();
                         }}
                         disabled={isRefreshing}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-700 hover:bg-pink-50 hover:text-pink-700 rounded-xl transition-colors text-left cursor-pointer font-medium disabled:opacity-50"

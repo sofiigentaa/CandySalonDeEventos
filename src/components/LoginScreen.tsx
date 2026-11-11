@@ -1,77 +1,111 @@
 import React, { useState } from 'react';
-import { KeyRound, Lock, LogIn, Mail, UserPlus } from 'lucide-react';
+import { KeyRound, Lock, LogIn, ShieldCheck, Smartphone, UserPlus } from 'lucide-react';
 import { CalandriaMark } from '../calandria/CalandriaUI.tsx';
-import { useAuth } from '../contexts/AuthContext.tsx';
+import { PendingTwoFactor, useAuth } from '../contexts/AuthContext.tsx';
 
 type FormMode = 'login' | 'signup' | 'forgot';
 
+const inputClass =
+  'w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-pink-500/30 focus:border-pink-500';
+
+const CodeInput: React.FC<{ value: string; onChange: (v: string) => void; autoFocus?: boolean }> = ({ value, onChange, autoFocus }) => (
+  <label className="block space-y-1.5">
+    <span className="text-xs font-bold text-slate-700">Código de la app autenticadora</span>
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="one-time-code"
+      pattern="[0-9 ]*"
+      maxLength={7}
+      required
+      autoFocus={autoFocus}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="123456"
+      className={`${inputClass} text-center text-lg tracking-[0.4em] font-mono`}
+    />
+  </label>
+);
+
 export const LoginScreen: React.FC = () => {
-  const { isConfigured, passwordRecovery, logIn, signUp, requestPasswordReset, updatePassword } = useAuth();
+  const { logIn, signUp, verifyCode, resetPassword } = useAuth();
   const [mode, setMode] = useState<FormMode>('login');
+  const [pending, setPending] = useState<PendingTwoFactor | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
-  const changeMode = (nextMode: FormMode) => {
+  const reset = (nextMode: FormMode) => {
     setMode(nextMode);
+    setPending(null);
     setError(null);
-    setNotice(null);
     setPassword('');
     setConfirmPassword('');
+    setCode('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setNotice(null);
+    const cleanCode = code.replace(/\s/g, '');
 
-    if ((mode === 'signup' || passwordRecovery) && password !== confirmPassword) {
+    if (!pending && (mode === 'signup' || mode === 'forgot') && password !== confirmPassword) {
       setError('Las contraseñas no coinciden.');
+      return;
+    }
+    if ((pending || mode === 'forgot') && !/^\d{6}$/.test(cleanCode)) {
+      setError('El código tiene 6 números.');
       return;
     }
 
     setSending(true);
     try {
-      let result: string | null;
-      if (passwordRecovery) {
-        result = await updatePassword(password);
-        if (!result) {
-          setNotice('Tu contraseña se actualizó. Ya podés iniciar sesión.');
-          setPassword('');
-          setConfirmPassword('');
-        }
-      } else if (mode === 'signup') {
-        result = await signUp(email.trim(), password);
-        if (!result) {
-          setNotice('Te enviamos un correo para verificar tu cuenta. Confirmá tu email antes de iniciar sesión.');
-          setMode('login');
-          setPassword('');
-          setConfirmPassword('');
+      if (pending) {
+        const result = await verifyCode(pending.pendingToken, cleanCode);
+        if (result) {
+          setError(result);
+          setCode('');
         }
       } else if (mode === 'forgot') {
-        result = await requestPasswordReset(email.trim());
-        if (!result) setNotice('Si existe una cuenta con ese email, te enviamos un enlace para restablecer la contraseña.');
+        const result = await resetPassword(email.trim(), cleanCode, password);
+        if (result) setError(result);
       } else {
-        result = await logIn(email.trim(), password);
+        const result = mode === 'signup' ? await signUp(email.trim(), password) : await logIn(email.trim(), password);
+        if (result.error) setError(result.error);
+        if (result.data) {
+          setPending(result.data);
+          setPassword('');
+          setConfirmPassword('');
+          setCode('');
+        }
       }
-      if (result) setError(result);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'No se pudo completar la solicitud.');
     } finally {
       setSending(false);
     }
   };
 
-  const title = passwordRecovery
-    ? 'Nueva contraseña'
+  const title = pending
+    ? 'Verificación en dos pasos'
     : mode === 'signup'
       ? 'Crear cuenta'
       : mode === 'forgot'
-        ? 'Recuperar contraseña'
+        ? 'Nueva contraseña'
         : 'Acceso al sistema';
+
+  const submitLabel = sending
+    ? 'Procesando…'
+    : pending
+      ? pending.step === 'enroll' ? 'Activar y entrar' : 'Verificar'
+      : mode === 'signup'
+        ? 'Continuar'
+        : mode === 'forgot'
+          ? 'Guardar contraseña'
+          : 'Ingresar';
+
+  const SubmitIcon = pending ? ShieldCheck : mode === 'signup' ? UserPlus : mode === 'forgot' ? KeyRound : LogIn;
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -84,55 +118,74 @@ export const LoginScreen: React.FC = () => {
           <CalandriaMark className="w-14 h-16" />
           <div className="font-bold text-xl text-slate-900 tracking-tight">Golondrina</div>
           <p className="text-xs text-slate-500 flex items-center gap-1.5">
-            {passwordRecovery ? <KeyRound className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+            {pending ? <ShieldCheck className="w-3.5 h-3.5" /> : mode === 'forgot' ? <KeyRound className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
             {title}
           </p>
+          {pending && <p className="text-[11px] text-slate-400">{pending.email}</p>}
         </div>
 
-        {!isConfigured && (
-          <p role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-            Falta configurar VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.
+        {pending?.step === 'enroll' && (
+          <div className="space-y-3 text-xs text-slate-600">
+            <p>
+              Para activar la cuenta, vinculá una app autenticadora en tu celular (Google Authenticator,
+              Microsoft Authenticator, Authy…). Se hace una sola vez.
+            </p>
+            <ol className="list-decimal pl-4 space-y-1">
+              <li>En la app elegí <b>agregar cuenta</b> → <b>escanear código QR</b>.</li>
+              <li>Escaneá este código.</li>
+              <li>Escribí abajo los 6 números que muestra la app.</li>
+            </ol>
+            {pending.qrCode && (
+              <div className="flex justify-center">
+                <img src={pending.qrCode} alt="Código QR para la app autenticadora" className="w-44 h-44 border border-slate-200 rounded-xl p-1 bg-white" />
+              </div>
+            )}
+            {pending.secret && (
+              <details className="text-[11px]">
+                <summary className="cursor-pointer font-semibold text-pink-700">¿No podés escanear? Ingresá la clave a mano</summary>
+                <code className="block mt-1.5 break-all bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 select-all">{pending.secret}</code>
+              </details>
+            )}
+          </div>
+        )}
+
+        {pending?.step === 'verify' && (
+          <p className="text-xs text-slate-600 flex gap-2">
+            <Smartphone className="w-4 h-4 shrink-0 text-pink-600" />
+            Abrí tu app autenticadora y escribí el código de 6 números de Golondrina.
           </p>
         )}
 
-        {!passwordRecovery && mode !== 'login' && mode !== 'forgot' && (
-          <p className="text-xs text-slate-600">Creá una cuenta. Te enviaremos un email para verificarla.</p>
+        {mode === 'forgot' && !pending && (
+          <p className="text-xs text-slate-600">
+            Para cambiar la contraseña, confirmá que sos vos con el código de tu app autenticadora.
+          </p>
         )}
 
-        {!passwordRecovery && (
+        {!pending && (
           <label className="block space-y-1.5">
             <span className="text-xs font-bold text-slate-700">Email</span>
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@email.com"
-              className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-pink-500/30 focus:border-pink-500"
-            />
+            <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@email.com" className={inputClass} />
           </label>
         )}
 
-        {mode !== 'forgot' && (
+        {!pending && (
           <label className="block space-y-1.5">
-            <span className="text-xs font-bold text-slate-700">
-              {passwordRecovery ? 'Nueva contraseña' : 'Contraseña'}
-            </span>
+            <span className="text-xs font-bold text-slate-700">{mode === 'forgot' ? 'Nueva contraseña' : 'Contraseña'}</span>
             <input
               type="password"
               required
               minLength={8}
-              autoComplete={passwordRecovery ? 'new-password' : mode === 'signup' ? 'new-password' : 'current-password'}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Mínimo 8 caracteres"
-              className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-pink-500/30 focus:border-pink-500"
+              className={inputClass}
             />
           </label>
         )}
 
-        {(mode === 'signup' || passwordRecovery) && (
+        {!pending && (mode === 'signup' || mode === 'forgot') && (
           <label className="block space-y-1.5">
             <span className="text-xs font-bold text-slate-700">Repetir contraseña</span>
             <input
@@ -143,16 +196,13 @@ export const LoginScreen: React.FC = () => {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Volvé a escribir la contraseña"
-              className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-pink-500/30 focus:border-pink-500"
+              className={inputClass}
             />
           </label>
         )}
 
-        {notice && (
-          <p role="status" className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-            {notice}
-          </p>
-        )}
+        {(pending || mode === 'forgot') && <CodeInput value={code} onChange={setCode} autoFocus={Boolean(pending)} />}
+
         {error && (
           <p role="alert" className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
             {error}
@@ -161,44 +211,37 @@ export const LoginScreen: React.FC = () => {
 
         <button
           type="submit"
-          disabled={sending || !isConfigured}
+          disabled={sending}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-pink-600 hover:bg-pink-700 disabled:opacity-60 rounded-xl transition-colors cursor-pointer"
         >
-          {mode === 'signup' ? <UserPlus className="w-4 h-4" /> : mode === 'forgot' ? <Mail className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-          {sending
-            ? 'Procesando…'
-            : passwordRecovery
-              ? 'Guardar contraseña'
-              : mode === 'signup'
-                ? 'Crear cuenta'
-                : mode === 'forgot'
-                  ? 'Enviar enlace'
-                  : 'Ingresar'}
+          <SubmitIcon className="w-4 h-4" />
+          {submitLabel}
         </button>
 
-        {!passwordRecovery && (
-          <div className="flex flex-col items-center gap-2 text-xs">
-            {mode === 'login' && (
-              <>
-                <button type="button" onClick={() => changeMode('forgot')} className="font-semibold text-pink-700 hover:text-pink-800 cursor-pointer">
-                  Olvidé mi contraseña
-                </button>
-                <p className="text-slate-500">
-                  ¿No tenés cuenta?{' '}
-                  <button type="button" onClick={() => changeMode('signup')} className="font-bold text-pink-700 hover:text-pink-800 cursor-pointer">
-                    Registrarme
-                  </button>
-                </p>
-              </>
-            )}
-            {mode !== 'login' && (
-              <button type="button" onClick={() => changeMode('login')} className="font-semibold text-pink-700 hover:text-pink-800 cursor-pointer">
-                Volver a iniciar sesión
+        <div className="flex flex-col items-center gap-2 text-xs">
+          {!pending && mode === 'login' && (
+            <>
+              <button type="button" onClick={() => reset('forgot')} className="font-semibold text-pink-700 hover:text-pink-800 cursor-pointer">
+                Olvidé mi contraseña
               </button>
-            )}
-            <p className="text-center text-[11px] text-slate-400 mt-2">una solución de <b className="text-slate-600">tecnoros.ar</b></p>
-          </div>
-        )}
+              <p className="text-slate-500">
+                ¿No tenés cuenta?{' '}
+                <button type="button" onClick={() => reset('signup')} className="font-bold text-pink-700 hover:text-pink-800 cursor-pointer">
+                  Registrarme
+                </button>
+              </p>
+            </>
+          )}
+          {(pending || mode !== 'login') && (
+            <button type="button" onClick={() => reset('login')} className="font-semibold text-pink-700 hover:text-pink-800 cursor-pointer">
+              Volver a iniciar sesión
+            </button>
+          )}
+          {pending?.step === 'verify' && (
+            <p className="text-center text-[11px] text-slate-400">¿Perdiste el celular? Pedile al administrador que reinicie tu 2FA.</p>
+          )}
+          <p className="text-center text-[11px] text-slate-400 mt-2">una solución de <b className="text-slate-600">tecnoros.ar</b></p>
+        </div>
       </form>
     </div>
   );

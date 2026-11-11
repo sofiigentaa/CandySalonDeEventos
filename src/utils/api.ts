@@ -7,9 +7,8 @@ import {
   loadExpensesFromStorage,
   saveExpensesToStorage,
 } from './storage.ts';
-import { supabase } from './supabase.ts';
 
-// La sesión de Supabase aporta el token de acceso para cada llamada a la API.
+// La sesión viaja en una cookie httpOnly (la pone el servidor al iniciar sesión).
 // Si un guardado falla, se avisa en pantalla (antes fallaba en silencio).
 
 type ErrorHandler = (message: string) => void;
@@ -31,14 +30,6 @@ export class ApiError extends Error {
 
 export async function apiRequest<T = any>(url: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (supabase) {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      onUnauthorized();
-      throw new ApiError(error.message, 401);
-    }
-    if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
-  }
   Object.assign(headers, init.headers || {});
 
   let res: Response;
