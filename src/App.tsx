@@ -64,9 +64,11 @@ import { CalandriaHome, ResumenSeccion } from './calandria/CalandriaHome.tsx';
 import { CalandriaPanel, CalandriaLogModal, CalandriaResultModal, CalandriaToast } from './calandria/CalandriaUI.tsx';
 
 import { CalendarPlus, Plus, FilterX } from 'lucide-react';
+import { AdminUsersModal } from './components/AdminUsersModal.tsx';
 
 export default function App() {
-  const { logOut } = useAuth();
+  const { logOut, user } = useAuth();
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   // Pantalla principal: la G de Golondrina. "Abrir sistema" muestra el sistema completo.
   const [vista, setVistaState] = useState<'calandria' | 'sistema'>(() => {
@@ -777,6 +779,7 @@ export default function App() {
         onClearAllData={demoTools ? handleClearAllData : undefined}
         onResetDemoData={demoTools ? handleResetData : undefined}
         onLogout={logOut}
+        onOpenAdminPanel={user?.isAdmin ? () => setIsAdminPanelOpen(true) : undefined}
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
         onOpenQuoteCalculator={handleOpenQuoteCalculator}
         viewMode={viewMode}
@@ -984,6 +987,10 @@ export default function App() {
         events={events}
         currency={currency}
       />
+
+      {user?.isAdmin && (
+        <AdminUsersModal isOpen={isAdminPanelOpen} onClose={() => setIsAdminPanelOpen(false)} currentUserId={user.id} />
+      )}
 
       <BackupModal
         isOpen={isBackupModalOpen}

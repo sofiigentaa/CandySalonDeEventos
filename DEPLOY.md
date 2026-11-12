@@ -44,7 +44,11 @@ npm run dev
 - **Olvidé mi contraseña:** email + código de la app + contraseña nueva. Cierra las sesiones abiertas en otros equipos.
 - Las contraseñas se guardan con `scrypt`; la sesión es una cookie `httpOnly` de 30 días y en la base solo queda el hash del token. Hay límite de intentos por IP y email, y cada código de la app sirve una sola vez.
 
-**Si alguien pierde el celular**, un administrador reinicia su 2FA con `psql` (en Render, usando la External Database URL). En el próximo ingreso le va a aparecer un QR nuevo:
+**Si alguien pierde el celular**, un administrador entra a la ruedita del menú → **Administrar usuarios** → **Reiniciar 2FA** en esa cuenta. Se desvincula su app y se cierran sus sesiones; en el próximo ingreso (con su contraseña) escanea un QR nuevo. Un administrador no puede reiniciar su propio 2FA: conviene tener al menos dos.
+
+Los administradores se definen con la variable `ADMIN_EMAILS` (emails separados por coma). Como el registro no verifica el email, **cada administrador debe crear su cuenta apenas se configura la variable**, antes de compartir la dirección del sistema: si otra persona registra ese email primero, sería administradora.
+
+Si el único administrador pierde el celular, se reinicia con `psql` (en Render, usando la External Database URL):
 
 ```sql
 UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE lower(email) = 'persona@email.com';
@@ -56,7 +60,7 @@ DELETE FROM auth_tokens WHERE user_id = (SELECT uid FROM users WHERE lower(email
 El PostgreSQL local de una computadora no es accesible desde Render. El archivo `render.yaml` (Blueprint) crea todo junto: la base **PostgreSQL de Render** (`candy-salon-db`) y el servicio web, y conecta `DATABASE_URL` automáticamente con la URL interna de la base. Las tablas se crean solas en el primer arranque.
 
 1. En [dashboard.render.com](https://dashboard.render.com): **New → Blueprint**, elegir este repositorio y la rama `main`.
-2. Render pide `GEMINI_API_KEY` (opcional, para la IA de contratos). Se puede dejar vacía.
+2. Render pide `ADMIN_EMAILS` (el email de quien administra; varios separados por coma) y `GEMINI_API_KEY` (opcional, para la IA de contratos).
 3. **Apply**. Cuando termine, abrir `https://<servicio>.onrender.com/api/health`: debe responder `"database":"postgres"`.
 4. Entrar a `https://<servicio>.onrender.com` y crear la cuenta (con la app autenticadora a mano).
 

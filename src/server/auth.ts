@@ -12,6 +12,21 @@ import { isMemoryMode } from '../db/eventsService.ts';
 export interface AuthenticatedUser {
   id: string;
   email: string;
+  isAdmin: boolean;
+}
+
+// Administradores: emails separados por coma en ADMIN_EMAILS (variable de entorno).
+function adminEmails(): Set<string> {
+  return new Set(
+    (process.env.ADMIN_EMAILS || '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+export function isAdminEmail(email: string): boolean {
+  return adminEmails().has(email.trim().toLowerCase());
 }
 
 declare global {
@@ -267,6 +282,28 @@ async function updateUser(user: UserRow, changes: Partial<Pick<UserRow, 'passwor
   );
 }
 
+interface UserSummary {
+  id: string;
+  email: string;
+  twoFactorEnabled: boolean;
+  createdAt: string | null;
+}
+
+async function listUsers(): Promise<UserSummary[]> {
+  if (isMemoryMode()) {
+    return [...memUsers.values()]
+      .map((u) => ({ id: u.id, email: u.email, twoFactorEnabled: u.totpEnabled, createdAt: null }))
+      .sort((a, b) => a.email.localeCompare(b.email));
+  }
+  const { rows } = await createPool().query('SELECT uid, email, totp_enabled, created_at FROM users ORDER BY lower(email)');
+  return rows.map((row) => ({
+    id: row.uid,
+    email: row.email,
+    twoFactorEnabled: Boolean(row.totp_enabled),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+  }));
+}
+
 const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
 async function createToken(userId: string, kind: TokenRow['kind'], ttlMs: number): Promise<string> {
@@ -378,7 +415,7 @@ async function startSession(res: express.Response, user: UserRow) {
 }
 
 function publicUser(user: UserRow): AuthenticatedUser {
-  return { id: user.id, email: user.email };
+  return { id: user.id, email: user.email, isAdmin: isAdminEmail(user.email) };
 }
 
 // ---------------------------------------------------------------------------
@@ -491,6 +528,37 @@ async function userFromRequest(req: express.Request): Promise<AuthenticatedUser 
   if (!session) return null;
   const user = await findUserById(session.userId);
   return user?.totpEnabled ? publicUser(user) : null;
+}
+
+export function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!req.user?.isAdmin) return res.status(403).json({ error: 'Solo un administrador puede hacer esto.' });
+  return next();
+}
+
+// Rutas /api/admin/* (montar después de requireSession + requireAdmin).
+export function createAdminRouter(): express.Router {
+  const router = express.Router();
+
+  router.get('/users', handle(async (_req, res) => {
+    const users = await listUsers();
+    res.json(users.map((u) => ({ ...u, isAdmin: isAdminEmail(u.email) })));
+  }));
+
+  // Reinicia el 2FA: borra la app vinculada y cierra todas las sesiones de esa
+  // persona. En su próximo ingreso (con su contraseña) verá un QR nuevo.
+  router.post('/users/:id/reset-2fa', handle(async (req, res) => {
+    if (req.params.id === req.user!.id) {
+      throw new AuthError('No podés reiniciar tu propio 2FA desde acá. Pedíselo a otro administrador.');
+    }
+    const user = await findUserById(req.params.id);
+    if (!user) throw new AuthError('El usuario no existe.', 404);
+    await updateUser(user, { totpEnabled: false, totpSecret: null, totpLastStep: null });
+    await deleteUserTokens(user.id);
+    console.log(`[admin] ${req.user!.email} reinició el 2FA de ${user.email}`);
+    res.json({ success: true, user: { id: user.id, email: user.email, twoFactorEnabled: false } });
+  }));
+
+  return router;
 }
 
 export async function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {

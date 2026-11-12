@@ -5,9 +5,10 @@ import { setStorageUserId } from '../utils/storage.ts';
 // Autenticación propia: email + contraseña + código de app autenticadora (2FA).
 // La sesión vive en una cookie httpOnly que maneja el servidor.
 
-interface SessionUser {
+export interface SessionUser {
   id: string;
   email: string;
+  isAdmin: boolean;
 }
 
 // Respuesta del paso 1 (registro o ingreso): falta el código de la app.

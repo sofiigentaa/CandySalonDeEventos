@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CalendarDays, Table, BellRing, RotateCcw, Trash2, Database, Sparkles, ChevronDown, Wallet, ShieldCheck, FileDown, Calculator, LogOut } from 'lucide-react';
+import { CalendarDays, Table, BellRing, RotateCcw, Trash2, Database, Sparkles, ChevronDown, Wallet, ShieldCheck, FileDown, Calculator, LogOut, UserCog } from 'lucide-react';
 import { ViewMode } from '../types.ts';
 import { CalandriaBrand } from '../calandria/CalandriaUI.tsx';
 
@@ -11,6 +11,7 @@ interface NavbarProps {
   onClearAllData?: () => void;
   onResetDemoData?: () => void;
   onLogout?: () => void;
+  onOpenAdminPanel?: () => void; // solo administradores
   onOpenBackupModal?: () => void;
   onOpenQuoteCalculator?: () => void;
   viewMode: ViewMode;
@@ -27,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onClearAllData,
   onResetDemoData,
   onLogout,
+  onOpenAdminPanel,
   onOpenBackupModal,
   onOpenQuoteCalculator,
   viewMode,
@@ -273,6 +275,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <div>
                           <p className="font-medium text-slate-700">Cargar datos de ejemplo</p>
                           <p className="text-[10px] text-slate-400">Para probar el sistema</p>
+                        </div>
+                      </button>
+                    )}
+
+                    {/* Panel de administrador */}
+                    {onOpenAdminPanel && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onOpenAdminPanel();
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 mt-0.5 text-xs text-violet-700 hover:bg-violet-50 rounded-xl transition-colors text-left cursor-pointer font-medium border-t border-slate-100"
+                      >
+                        <UserCog className="w-4 h-4 text-violet-600" />
+                        <div>
+                          <p className="font-semibold text-violet-900">Administrar usuarios</p>
+                          <p className="text-[10px] text-violet-600/80">Reiniciar 2FA</p>
                         </div>
                       </button>
                     )}

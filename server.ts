@@ -21,7 +21,7 @@ import {
 } from './src/db/eventsService.ts';
 import { appendCalandriaLog, ensureCalandriaTable, getCalandriaLog, validateLogInput } from './src/server/calandriaLog.ts';
 import { generateContractWithGemini, chatWithContractAssistant } from './src/utils/aiContractService.ts';
-import { createAuthRouter, ensureAuthTables, isProduction, requireSession } from './src/server/auth.ts';
+import { createAdminRouter, createAuthRouter, ensureAuthTables, isProduction, requireAdmin, requireSession } from './src/server/auth.ts';
 import {
   ValidationError,
   findBookingConflict,
@@ -91,6 +91,9 @@ async function startServer() {
 
   // Todo lo que sigue exige sesión iniciada.
   app.use('/api', requireSession);
+
+  // Panel de administrador (emails en ADMIN_EMAILS).
+  app.use('/api/admin', requireAdmin, createAdminRouter());
 
   app.get('/api/events', async (req, res) => {
     try {

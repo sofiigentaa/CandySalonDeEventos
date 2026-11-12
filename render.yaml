@@ -28,6 +28,9 @@ services:
         fromDatabase:
           name: candy-salon-db
           property: connectionString
+      # Emails de administradores (separados por coma): ven "Administrar usuarios".
+      - key: ADMIN_EMAILS
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: ALLOW_DEMO_RESET
